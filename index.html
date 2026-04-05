@@ -473,6 +473,8 @@ function showSplash() {
           u.employment=prof.employment||null;
           u.resume_url=prof.resume_url||null;
           u.avatar_url=prof.avatar_url||null;
+          // Always use real Supabase ID, not local_ fake ID
+          u.id=prof.id||res.data.user.id;
         }
         S.saveUser(u);showMainApp();
       } else {
@@ -910,6 +912,11 @@ function LeaderboardTab() {
   }
 
   load();
+  // Auto-refresh every 15 seconds
+  const refreshTimer = setInterval(()=>{
+    if(S.tab==='board'&&!_lbSelProfile&&!_lbSelClass) load();
+    else clearInterval(refreshTimer);
+  },15000);
   return container;
 }
 
@@ -921,7 +928,7 @@ function renderUserProfile() {
     div({class:'screen'},
       div({style:{background:'linear-gradient(160deg,var(--navy),#1A4080)',padding:'44px 22px 28px',textAlign:'center',color:'#fff'}},
         btn({class:'btn btn-g',style:{color:'rgba(255,255,255,.7)',width:'auto',marginBottom:16,padding:'6px 0',textAlign:'left'},'click':()=>{S.tab='board';renderApp();}},'← Back'),
-        div({style:{width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.1))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:38,margin:'0 auto 10px',border:'3px solid rgba(255,255,255,.3)'}},(p2.profile_emoji||'😊')),
+        div({style:{fontSize:56,margin:'0 auto 10px',lineHeight:1,textAlign:'center'}},(p2.profile_emoji||'😊')),
         h('h2',{style:{color:'#fff',fontFamily:"'DM Serif Display',serif",fontWeight:400,fontSize:22}},p2.full_name||p2.email?.split('@')[0]||'User'),
         p2.grade ? p({style:{color:'rgba(255,255,255,.65)',fontSize:13,marginTop:4}},p2.grade) : null,
         span({class:'xpb',style:{marginTop:12,display:'inline-flex'}},'⚡ '+(p2.xp_total||0)+' XP')
@@ -952,10 +959,11 @@ function renderClassDetail(allProfiles, allBadges, backFn) {
   const members = allProfiles.filter(p2=>memberIds.includes(p2.id)).sort((a,b)=>(b.xp_total||0)-(a.xp_total||0));
   mount(div({style:{display:'flex',flexDirection:'column',height:'100%'}},
     div({class:'screen'},
-      div({style:{background:'linear-gradient(160deg,var(--navy),#1A4080)',padding:'44px 22px 22px',color:'#fff'}}),
+      div({style:{background:'linear-gradient(160deg,var(--navy),#1A4080)',padding:'44px 22px 22px',color:'#fff'}},
         btn({class:'btn btn-g',style:{color:'rgba(255,255,255,.7)',width:'auto',marginBottom:12,padding:'6px 0'},'click':()=>{_lbView='classes';S.tab='board';renderApp();}},'← Back'),
         h('h2',{style:{color:'#fff',fontFamily:"'DM Serif Display',serif",fontWeight:400,fontSize:22}},cls.name),
-        p({style:{color:'rgba(255,255,255,.65)',fontSize:13,marginTop:4}},'Class code: ',span({style:{fontWeight:700,letterSpacing:'.05em'}},cls.code),' · ',members.length,' members'),
+        p({style:{color:'rgba(255,255,255,.65)',fontSize:13,marginTop:4}},'Class code: ',span({style:{fontWeight:700,letterSpacing:'.05em'}},cls.code),' · ',members.length,' members')
+      ),
       div({style:{padding:'20px 20px 40px'}},
         members.length ? div(null, ...members.map((p2,i)=>{
           const userBadges=allBadges.filter(b=>b.user_id===p2.id);
@@ -1100,8 +1108,7 @@ function renderCourseDetail() {
     });
     return div({style:{marginBottom:16}},
       div({style:{display:'flex',alignItems:'center',gap:7,marginBottom:9}},
-        div({style:{width:30,height:30,borderRadius:'50%',background:'linear-gradient(135deg,var(--primary),var(--teal))',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,flexShrink:0,boxShadow:'0 2px 8px rgba(26,86,219,.3)'}},mi+1),
-        h('h3',{style:{fontSize:15,lineHeight:1.35}},mod.title)
+        h('h3',{style:{fontSize:15,lineHeight:1.35,color:'var(--navy)'}},mod.title)
       ),
       div({class:'card',style:{padding:'3px 14px'}},...rows)
     );
@@ -1329,9 +1336,12 @@ function renderEditProfile() {
       S.user.employment = vals.job_interest;
       S.user.profile_emoji = selectedEmoji;
       localStorage.setItem('pw_u',JSON.stringify(S.user));
-      // Save to Supabase
-      if(S.user.id && S.token){
-        await sbPatch('profiles','?id=eq.'+S.user.id,{
+      // Save to Supabase - use email as fallback if id is local
+      if(S.token){
+        const patchFilter = S.user.id && !String(S.user.id).startsWith('local_')
+          ? '?id=eq.'+S.user.id
+          : '?email=eq.'+encodeURIComponent(S.user.email);
+        const patchResult = await sbPatch('profiles', patchFilter, {
           full_name:vals.name.trim(),
           grade:vals.grade||null,
           job_interest:vals.job_interest||null,
@@ -1339,7 +1349,8 @@ function renderEditProfile() {
           employment_status:vals.job_interest||null,
           resume_url:S.user.resume_url||null,
           profile_emoji:selectedEmoji,
-        },S.token);
+        }, S.token);
+        console.log('Profile patch result:', patchResult.ok, patchFilter);
       }
       saveBtnEl.textContent='Save Changes';saveBtnEl.disabled=false;
       saveMsg='✅ Profile saved!';
@@ -1440,6 +1451,159 @@ function renderEditProfile() {
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 let _aTab='courses', _aSelC=null, _aSelM=null, _aSelL=null, _aModal=null;
+let _adminFormVals={};
+
+function openModal(type, data){ _aModal=type; _adminFormVals={...(data||{})}; renderAdmin(); }
+function closeModal(){ _aModal=null; _adminFormVals={}; renderAdmin(); }
+
+function renderModal(){
+  const m=div({class:'modal'});
+  m.appendChild(div({class:'hdl'}));
+
+  function fi(lbl,key,placeholder,type='text'){
+    const i=h('input',{type,placeholder,value:_adminFormVals[key]||'',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14}});
+    i.addEventListener('input',()=>_adminFormVals[key]=type==='number'?Number(i.value):i.value);
+    i.addEventListener('focus',()=>i.style.borderColor='var(--primary)');
+    i.addEventListener('blur',()=>i.style.borderColor='var(--border)');
+    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),i);
+  }
+  function fs(lbl,key,options){
+    const s=h('select',{style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14,background:'#fff'}});
+    options.forEach(([v,t])=>{const o=h('option',{value:v},t);if(_adminFormVals[key]===v)o.selected=true;s.appendChild(o);});
+    s.addEventListener('change',()=>_adminFormVals[key]=s.value);
+    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),s);
+  }
+  function fta(lbl,key,placeholder){
+    const t=h('textarea',{placeholder,style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:90,resize:'vertical',outline:'none',marginBottom:14}});
+    t.value=_adminFormVals[key]||'';
+    t.addEventListener('input',()=>_adminFormVals[key]=t.value);
+    t.addEventListener('focus',()=>t.style.borderColor='var(--primary)');
+    t.addEventListener('blur',()=>t.style.borderColor='var(--border)');
+    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),t);
+  }
+
+  if(_aModal==='addCourse'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Add New Course'));
+    m.appendChild(fi('Course Title *','title','e.g. Financial Literacy'));
+    m.appendChild(fi('Description','description','What students will learn'));
+    m.appendChild(fi('Emoji Icon','emoji','💰'));
+    m.appendChild(fi('Color (hex)','color','#1E4976'));
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.title){alert('Title is required');return;}
+      const row={id:crypto.randomUUID(),title:_adminFormVals.title,description:_adminFormVals.description||'',emoji:_adminFormVals.emoji||'📚',color:_adminFormVals.color||'#1E4976',published:false,order_index:S.courses.length+1};
+      await sbPost('courses',row,S.token);
+      await reloadCourses();closeModal();
+    }},'Create Course'));
+  }
+  else if(_aModal==='addModule'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Module'));
+    m.appendChild(fi('Module Title *','title','e.g. Building Your First Budget'));
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.title||!_aSelC){alert('Title required');return;}
+      const row={id:crypto.randomUUID(),course_id:_aSelC.id,title:_adminFormVals.title,order_index:(_aSelC.modules||[]).length+1};
+      await sbPost('modules',row,S.token);
+      await reloadCourses();
+      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
+      closeModal();
+    }},'Add Module'));
+  }
+  else if(_aModal==='editModule'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Edit Module'));
+    m.appendChild(fi('Module Title *','title','Module title'));
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.title){alert('Title required');return;}
+      await sbPatch('modules','?id=eq.'+_adminFormVals.id,{title:_adminFormVals.title},S.token);
+      await reloadCourses();
+      _aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
+      closeModal();
+    }},'Save Changes'));
+  }
+  else if(_aModal==='addLesson'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Lesson'));
+    m.appendChild(fi('Lesson Title *','title','e.g. The 50/30/20 Rule'));
+    m.appendChild(fs('Type *','type',[['text','📄 Text'],['video','🎬 Video'],['link','🔗 Link/Resource'],['quiz','❓ Quiz']]));
+    m.appendChild(fi('XP Reward','xp','10','number'));
+    const ca=div(null);
+    function updateCA(){
+      ca.innerHTML='';
+      const t=_adminFormVals.type||'text';
+      if(t==='text') ca.appendChild(fta('Content (use \n for new lines)','content','Lesson text...'));
+      else if(t==='video') ca.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
+      else if(t==='link') ca.appendChild(fi('Resource URL','content','https://...'));
+    }
+    updateCA();
+    const ts=m.querySelector('select');
+    if(ts) ts.addEventListener('change',()=>{_adminFormVals.type=ts.value;updateCA();});
+    m.appendChild(ca);
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.title||!_aSelM){alert('Title required');return;}
+      const row={id:crypto.randomUUID(),module_id:_aSelM.id,title:_adminFormVals.title,lesson_type:_adminFormVals.type||'text',content:_adminFormVals.content||'',xp_reward:Number(_adminFormVals.xp)||10,order_index:(_aSelM.lessons||[]).length+1};
+      await sbPost('lessons',row,S.token);
+      await reloadCourses();
+      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
+      _aSelM=(_aSelC.modules||[]).find(mod=>mod.id===_aSelM.id)||_aSelM;
+      closeModal();
+    }},'Add Lesson'));
+  }
+  else if(_aModal==='editLesson'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Edit Lesson'));
+    m.appendChild(fi('Lesson Title *','title','Lesson title'));
+    m.appendChild(fs('Type','type',[['text','📄 Text'],['video','🎬 Video'],['link','🔗 Link/Resource'],['quiz','❓ Quiz']]));
+    m.appendChild(fi('XP Reward','xp','10','number'));
+    const ca2=div(null);
+    function updateCA2(){
+      ca2.innerHTML='';
+      const t=_adminFormVals.type||'text';
+      if(t==='text') ca2.appendChild(fta('Content','content','Lesson text...'));
+      else if(t==='video') ca2.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
+      else if(t==='link') ca2.appendChild(fi('Resource URL','content','https://...'));
+    }
+    updateCA2();
+    const ts2=m.querySelector('select');
+    if(ts2) ts2.addEventListener('change',()=>{_adminFormVals.type=ts2.value;updateCA2();});
+    m.appendChild(ca2);
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.title){alert('Title required');return;}
+      await sbPatch('lessons','?id=eq.'+_adminFormVals.id,{
+        title:_adminFormVals.title,
+        lesson_type:_adminFormVals.type||'text',
+        xp_reward:Number(_adminFormVals.xp)||10,
+        content:_adminFormVals.content||'',
+      },S.token);
+      await reloadCourses();
+      _aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
+      _aSelM=(_aSelC?.modules||[]).find(mod=>mod.id===_aSelM?.id)||_aSelM;
+      closeModal();
+    }},'Save Changes'));
+  }
+  else if(_aModal==='addQuestion'){
+    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Quiz Question'));
+    const ta2=h('textarea',{placeholder:'Type your question here...',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:80,resize:'vertical',outline:'none',marginBottom:14}});
+    ta2.addEventListener('input',()=>_adminFormVals.text=ta2.value);
+    m.appendChild(div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7}},'Question *'),ta2));
+    ['A','B','C','D'].forEach(l=>m.appendChild(fi('Option '+l,'opt'+l,'Answer choice '+l)));
+    m.appendChild(fs('Correct Answer *','correct',[['A','A — First option'],['B','B — Second option'],['C','C — Third option'],['D','D — Fourth option']]));
+    const ta3=h('textarea',{placeholder:'Why is this the correct answer?',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:70,resize:'vertical',outline:'none',marginBottom:14}});
+    ta3.addEventListener('input',()=>_adminFormVals.exp=ta3.value);
+    m.appendChild(div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7}},'Explanation'),ta3));
+    m.appendChild(btn({class:'btn btn-p','click':async()=>{
+      if(!_adminFormVals.text||!_adminFormVals.optA||!_adminFormVals.optB||!_adminFormVals.optC||!_adminFormVals.optD){alert('Please fill in the question and all 4 options.');return;}
+      const row={id:crypto.randomUUID(),lesson_id:_aSelL.id,question_text:_adminFormVals.text,option_a:_adminFormVals.optA,option_b:_adminFormVals.optB,option_c:_adminFormVals.optC,option_d:_adminFormVals.optD,correct_answer:_adminFormVals.correct||'A',explanation:_adminFormVals.exp||'',order_index:(_aSelL.questions||[]).length+1};
+      await sbPost('questions',row,S.token);
+      await reloadCourses();
+      _aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
+      _aSelM=(_aSelC?.modules||[]).find(mod=>mod.id===_aSelM?.id)||_aSelM;
+      _aSelL=(_aSelM?.lessons||[]).find(l=>l.id===_aSelL?.id)||_aSelL;
+      closeModal();
+    }},'Add Question'));
+  }
+
+  m.appendChild(btn({class:'btn btn-g',style:{marginTop:6},'click':closeModal},'Cancel'));
+  const overlay=div({class:'modal-bg','click':closeModal});
+  overlay.appendChild(m);
+  m.addEventListener('click',e=>e.stopPropagation());
+  return overlay;
+}
 
 function renderAdmin() {
   const tabs=[['courses','📚 Courses'],['content','📝 Content'],['stats','📊 Stats']];
@@ -1513,10 +1677,15 @@ function AdminContent() {
     const mods=_aSelC.modules||[];
     list=div(null,
       div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}},h('h3',{style:{fontSize:13}},'Modules'),btn({class:'btn btn-p btn-sm',style:{marginBottom:0},'click':()=>openModal('addModule',{})},'+ Module')),
-      mods.length?div(null,...mods.map(m=>div({class:'card',style:{marginBottom:7,padding:'10px 13px',cursor:'pointer',display:'flex',alignItems:'center',gap:9},'click':()=>{_aSelM=m;renderAdmin();}},
-        div({style:{width:26,height:26,borderRadius:'50%',background:'var(--sky)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11,color:'var(--teal)',flexShrink:0}},'M'),
-        div({style:{flex:1}},div({style:{fontWeight:500,fontSize:12}},m.title),div({style:{fontSize:10,color:'var(--muted)'}},(m.lessons||[]).length+' lessons')),
-        span({style:{color:'var(--muted)'}},'›')
+      mods.length?div(null,...mods.map(m=>div({class:'card',style:{marginBottom:7,padding:'10px 13px',display:'flex',alignItems:'center',gap:9}},
+        div({style:{display:'flex',alignItems:'center',gap:9,flex:1,cursor:'pointer'},'click':()=>{_aSelM=m;renderAdmin();}},
+          div({style:{width:26,height:26,borderRadius:'50%',background:'var(--sky)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11,color:'var(--teal)',flexShrink:0}},'M'),
+          div({style:{flex:1}},div({style:{fontWeight:500,fontSize:12}},m.title),div({style:{fontSize:10,color:'var(--muted)'}},(m.lessons||[]).length+' lessons'))
+        ),
+        div({style:{display:'flex',gap:5,flexShrink:0}},
+          btn({class:'btn btn-sm',style:{background:'var(--sky)',color:'var(--teal)',border:'none',marginBottom:0,padding:'6px 10px',fontSize:12},'click':()=>openModal('editModule',{id:m.id,title:m.title})},'✏️'),
+          span({style:{color:'var(--muted)',fontSize:18,cursor:'pointer',padding:'0 4px',lineHeight:'26px'},'click':()=>{_aSelM=m;renderAdmin();}},'›')
+        )
       ))):p({style:{color:'var(--muted)',fontSize:13,padding:'10px 0'}},'No modules yet.')
     );
   } else if(!_aSelL){
@@ -1529,11 +1698,14 @@ function AdminContent() {
           span({style:{fontSize:18}},icons[l.type]||'📄'),
           div({style:{flex:1}},div({style:{fontWeight:500,fontSize:12}},l.title),div({style:{fontSize:10,color:'var(--muted)',textTransform:'capitalize'}},l.type+' · '+(l.xp_reward||l.xp||10)+' XP'+(l.type==='quiz'?' · '+(l.questions||[]).length+' Qs':'')))
         ),
-        btn({class:'btn btn-sm',style:{background:'#fee2e2',color:'var(--danger)',border:'none',marginBottom:0,flexShrink:0},'click':async()=>{
-          if(!confirm('Delete lesson?')) return;
-          await sbDelete('lessons','?id=eq.'+l.id,S.token);
-          await reloadCourses();_aSelM=S.courses.flatMap(c=>c.modules).find(m=>m.id===_aSelM.id)||_aSelM;renderAdmin();
-        }},'✕')
+        div({style:{display:'flex',gap:5,flexShrink:0}},
+          btn({class:'btn btn-sm',style:{background:'var(--primary-light)',color:'var(--primary)',border:'none',marginBottom:0,padding:'6px 10px',fontSize:12},'click':()=>openModal('editLesson',{id:l.id,title:l.title,type:l.lesson_type||l.type,xp:String(l.xp_reward||l.xp||10),content:l.content||''})},'✏️'),
+          btn({class:'btn btn-sm',style:{background:'#fee2e2',color:'var(--danger)',border:'none',marginBottom:0,padding:'6px 10px',fontSize:12},'click':async()=>{
+            if(!confirm('Delete lesson?')) return;
+            await sbDelete('lessons','?id=eq.'+l.id,S.token);
+            await reloadCourses();_aSelM=S.courses.flatMap(c=>c.modules).find(m=>m.id===_aSelM.id)||_aSelM;renderAdmin();
+          }},'✕')
+        )
       ))):p({style:{color:'var(--muted)',fontSize:13,padding:'10px 0'}},'No lessons yet.')
     );
   } else {
@@ -1562,178 +1734,157 @@ function AdminContent() {
 }
 
 async function AdminStats() {
-  const container=div({style:{padding:'13px'}},div({style:{textAlign:'center',padding:'30px',color:'var(--muted)'}},'Loading survey data... ',div({class:'spin spin-d',style:{marginTop:10}})));
-  sbGet('profiles','?order=created_at.desc',S.token).then(({data})=>{
-    const profiles=Array.isArray(data)?data:[];
+  const container=div({style:{padding:'13px'}});
+
+  // Sub-tabs: Survey | Users & Resumes
+  let statsTab='survey';
+  function buildStatsHeader(){
+    const hdr=div({style:{display:'flex',gap:8,marginBottom:14}},
+      ...[['survey','📊 Survey'],['users','👤 Users & Resumes']].map(([t,l])=>
+        btn({class:'btn btn-sm',style:{background:statsTab===t?'var(--primary)':'#fff',color:statsTab===t?'#fff':'var(--muted)',border:statsTab===t?'none':'2px solid var(--border)',marginBottom:0},'click':()=>{statsTab=t;buildContent();}},l)
+      )
+    );
+    return hdr;
+  }
+
+  async function buildContent(){
     container.innerHTML='';
-    const COLORS=['var(--primary)','var(--teal)','var(--amber)','#8b5cf6','#ec4899','#10b981','#f97316'];
-    container.appendChild(div({style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:15}},
-      ...[{l:'Users',v:profiles.length,e:'👥'},{l:'Avg XP',v:profiles.length>0?Math.round(profiles.reduce((s,p)=>s+(p.xp_total||0),0)/profiles.length):0,e:'⚡'},{l:'Onboarded',v:profiles.filter(p=>p.onboarding_complete).length,e:'✅'}].map(s=>
-        div({class:'card',style:{padding:'9px',textAlign:'center',marginBottom:0}},div({style:{fontSize:16}},s.e),div({style:{fontSize:18,fontWeight:700,color:'var(--primary)'}},s.v),div({style:{fontSize:9,color:'var(--muted)',lineHeight:1.3}},s.l))
-      )
-    ));
-    h('h3',{style:{fontSize:13,marginBottom:8}});
-    container.appendChild(h('h3',{style:{fontSize:13,marginBottom:8,marginTop:4}},'📊 Survey Results'));
-    SQ.forEach(q=>{
-      const counts={};profiles.forEach(pr=>{const v=pr[q.k]||'No answer';counts[v]=(counts[v]||0)+1;});
-      const total=profiles.length||1;
-      const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>({lbl,cnt,pct:Math.round((cnt/total)*100)}));
-      const top=rows[0];let open=false;
-      const details=div({style:{display:'none',marginTop:10}},
-        ...rows.map((r,i)=>div({style:{marginBottom:8}},
-          div({style:{display:'flex',justifyContent:'space-between',marginBottom:3}},span({style:{fontSize:11,flex:1,paddingRight:7,lineHeight:1.4}},r.lbl),span({style:{fontSize:11,fontWeight:700,color:COLORS[i%COLORS.length],flexShrink:0}},r.pct+'% ('+r.cnt+')')),
-          div({style:{height:5,background:'var(--border)',borderRadius:99}},div({style:{height:5,background:COLORS[i%COLORS.length],borderRadius:99,width:r.pct+'%'}}))
-        ))
-      );
-      const arrow=span({style:{color:'var(--muted)',fontSize:14,flexShrink:0}},'›');
-      const card=div({class:'card',style:{marginBottom:7,padding:'12px 14px',cursor:'pointer'},'click':()=>{open=!open;details.style.display=open?'block':'none';arrow.textContent=open?'↓':'›';}},
-        div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:7}},
-          div({style:{flex:1}},div({style:{fontWeight:600,fontSize:12}},q.l),top?div({style:{fontSize:10,color:'var(--muted)',marginTop:2}},'Top: '+top.lbl+' · '+top.pct+'%'):null),arrow
-        ),details
-      );
-      container.appendChild(card);
-    });
-    container.appendChild(h('h3',{style:{fontSize:13,marginBottom:9,marginTop:8}},'👤 Registered Users'));
-    if(!profiles.length){container.appendChild(div({class:'empty'},div({class:'icon',style:{fontSize:32}},'👤'),p({style:{color:'var(--muted)',fontSize:13}},'No users yet.')));return;}
-    profiles.forEach(pr=>container.appendChild(
-      div({class:'card',style:{marginBottom:6,padding:'10px 13px',display:'flex',alignItems:'center',gap:9}},
-        div({style:{width:32,height:32,borderRadius:'50%',background:'var(--primary)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}},(pr.full_name||pr.email||'?')[0].toUpperCase()),
-        div({style:{flex:1,minWidth:0}},div({style:{fontWeight:600,fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},pr.full_name||pr.email),div({style:{fontSize:10,color:'var(--muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},pr.email+' · ⚡'+(pr.xp_total||0)+' XP')),
-        pr.is_admin?span({class:'chip chip-a',style:{fontSize:9}},'Admin'):null
-      )
-    ));
-  });
+    container.appendChild(buildStatsHeader());
+    container.appendChild(div({style:{textAlign:'center',padding:'20px'}},div({class:'spin spin-d'})));
+
+    const [profRes,badgeRes]=await Promise.all([
+      sbGet('profiles','?order=xp_total.desc',S.token),
+      sbGet('user_badges','?order=earned_at.desc',S.token),
+    ]);
+    const profiles=profRes.ok&&Array.isArray(profRes.data)?profRes.data:[];
+    const badges=badgeRes.ok&&Array.isArray(badgeRes.data)?badgeRes.data:[];
+
+    // Remove spinner
+    container.removeChild(container.lastChild);
+
+    if(statsTab==='survey'){
+      // Stat cards
+      container.appendChild(div({style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}},
+        ...[{l:'Users',v:profiles.length,e:'👥'},{l:'Avg XP',v:profiles.length>0?Math.round(profiles.reduce((s,p)=>s+(p.xp_total||0),0)/profiles.length):0,e:'⚡'},{l:'Badges',v:badges.length,e:'🏆'}].map(s=>
+          div({class:'card',style:{padding:'10px',textAlign:'center',marginBottom:0}},
+            div({style:{fontSize:18}},s.e),
+            div({style:{fontSize:20,fontWeight:700,color:'var(--primary)',marginTop:2}},s.v),
+            div({style:{fontSize:10,color:'var(--muted)',marginTop:1}},s.l)
+          )
+        )
+      ));
+
+      const COLORS=['var(--primary)','var(--teal)','var(--amber)','#8b5cf6','#ec4899','#10b981','#f97316'];
+      const SURVEY_KEYS=[
+        {k:'grade',l:'Grade Level'},
+        {k:'employment',l:'Employment Status'},
+        {k:'has_bank',l:'Has Bank Account'},
+        {k:'ever_budgeted',l:'Ever Made a Budget'},
+        {k:'fin_confidence',l:'Financial Confidence'},
+        {k:'debt_knowledge',l:'Debt Knowledge'},
+        {k:'college_plan',l:'College Plan'},
+        {k:'loan_awareness',l:'Loan Awareness'},
+        {k:'savings_habit',l:'Savings Habit'},
+        {k:'biggest_challenge',l:'Biggest Challenge'},
+        {k:'taught_finances',l:'Taught Finances'},
+        {k:'investing_knowledge',l:'Investing Knowledge'},
+      ];
+
+      if(!profiles.length){
+        container.appendChild(div({class:'empty'},div({class:'icon'},'📊'),p({style:{color:'var(--muted)',fontSize:14}},'No survey data yet.')));
+        return;
+      }
+
+      SURVEY_KEYS.forEach(q=>{
+        const counts={};
+        profiles.forEach(pr=>{
+          const v=pr[q.k]||'No answer';
+          counts[v]=(counts[v]||0)+1;
+        });
+        const total=profiles.filter(pr=>pr[q.k]).length||1;
+        const rows=Object.entries(counts).filter(([k])=>k!=='No answer').sort((a,b)=>b[1]-a[1]);
+        if(!rows.length) return;
+        let open=false;
+        const details=div({style:{display:'none',marginTop:10}},
+          ...rows.map((r,i)=>div({style:{marginBottom:7}},
+            div({style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+              span({style:{fontSize:12,flex:1,paddingRight:8,lineHeight:1.4,color:'var(--text)'}},r[0]),
+              span({style:{fontSize:12,fontWeight:700,color:COLORS[i%COLORS.length],flexShrink:0}},Math.round((r[1]/total)*100)+'% ('+r[1]+')')
+            ),
+            div({style:{height:6,background:'var(--border)',borderRadius:99}},
+              div({style:{height:6,background:COLORS[i%COLORS.length],borderRadius:99,width:Math.round((r[1]/total)*100)+'%',transition:'width .5s'}})
+            )
+          ))
+        );
+        const arrow=span({style:{color:'var(--muted)',fontSize:14,flexShrink:0}},'›');
+        const top=rows[0];
+        const card=div({class:'card',style:{marginBottom:8,cursor:'pointer'},'click':()=>{
+          open=!open;details.style.display=open?'block':'none';arrow.textContent=open?'↓':'›';
+        }},
+          div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}},
+            div({style:{flex:1}},
+              div({style:{fontWeight:700,fontSize:13}},q.l),
+              top?div({style:{fontSize:11,color:'var(--muted)',marginTop:2}},'Top: '+top[0]+' — '+Math.round((top[1]/total)*100)+'%'):null
+            ),arrow
+          ),
+          details
+        );
+        container.appendChild(card);
+      });
+
+    } else {
+      // Users & Resumes tab
+      container.appendChild(h('h3',{style:{fontSize:15,marginBottom:12}},'All Users'));
+      if(!profiles.length){
+        container.appendChild(div({class:'empty'},div({class:'icon'},'👤'),p({style:{color:'var(--muted)',fontSize:14}},'No users yet.')));
+        return;
+      }
+      profiles.forEach(pr=>{
+        const userBadges=badges.filter(b=>b.user_id===pr.id);
+        let detailOpen=false;
+        const details=div({style:{display:'none',marginTop:10,borderTop:'1px solid var(--border)',paddingTop:10}},
+          pr.grade?p({style:{fontSize:13,color:'var(--muted)',marginBottom:4}},span({style:{fontWeight:600}},'Grade: '),pr.grade):null,
+          pr.employment||pr.employment_status?p({style:{fontSize:13,color:'var(--muted)',marginBottom:4}},span({style:{fontWeight:600}},'Employment: '),pr.employment||pr.employment_status):null,
+          pr.college_plan?p({style:{fontSize:13,color:'var(--muted)',marginBottom:4}},span({style:{fontWeight:600}},'College Plan: '),pr.college_plan):null,
+          pr.biggest_challenge?p({style:{fontSize:13,color:'var(--muted)',marginBottom:4}},span({style:{fontWeight:600}},'Challenge: '),pr.biggest_challenge):null,
+          pr.fin_confidence?p({style:{fontSize:13,color:'var(--muted)',marginBottom:4}},span({style:{fontWeight:600}},'Confidence: '),pr.fin_confidence):null,
+          userBadges.length?div({style:{marginTop:8}},
+            p({style:{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:6}},'Badges ('+userBadges.length+'):'),
+            div({style:{display:'flex',gap:6,flexWrap:'wrap'}},
+              ...userBadges.map(b=>div({style:{display:'flex',flexDirection:'column',alignItems:'center',gap:3,width:50}},
+                div({style:{width:36,height:36,borderRadius:10,background:'#FEF9C3',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,border:'1px solid #F59F00'}},(b.emoji||'🏆')),
+                span({style:{fontSize:9,textAlign:'center',color:'var(--muted)',lineHeight:1.2}},b.course_title?.slice(0,12)||'Badge')
+              ))
+            )
+          ):null,
+          pr.resume_url?div({style:{marginTop:10}},
+            h('a',{href:pr.resume_url,target:'_blank',style:{display:'inline-flex',alignItems:'center',gap:7,padding:'9px 14px',background:'var(--primary)',color:'#fff',borderRadius:10,fontSize:13,fontWeight:600,textDecoration:'none'}},'📄 View Resume →')
+          ):p({style:{fontSize:12,color:'var(--muted)',marginTop:6,fontStyle:'italic'}},'No resume uploaded.')
+        );
+        const arrow2=span({style:{color:'var(--muted)',fontSize:14}},'›');
+        const card=div({class:'card',style:{marginBottom:8,cursor:'pointer'},'click':()=>{
+          detailOpen=!detailOpen;details.style.display=detailOpen?'block':'none';arrow2.textContent=detailOpen?'↓':'›';
+        }},
+          div({style:{display:'flex',alignItems:'center',gap:10}},
+            div({style:{width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,var(--primary),var(--teal))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,color:'#fff',flexShrink:0,fontWeight:700}},pr.profile_emoji||'😊'),
+            div({style:{flex:1,minWidth:0}},
+              div({style:{fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},pr.full_name||pr.email?.split('@')[0]||'User'),
+              div({style:{fontSize:12,color:'var(--muted)',marginTop:2}},pr.email,'  ⚡'+(pr.xp_total||0)+' XP  🏆'+userBadges.length)
+            ),
+            pr.is_admin?span({class:'chip chip-a',style:{fontSize:9,flexShrink:0}},'Admin'):null,
+            arrow2
+          ),
+          details
+        );
+        container.appendChild(card);
+      });
+    }
+  }
+
+  buildContent();
   return container;
 }
 
-// Modal system
-let _mData={};
-function openModal(type, data){_aModal=type;_mData={...data};renderAdmin();}
-function closeModal(){_aModal=null;_mData={};renderAdmin();}
-
-function renderModal(){
-  const m=div({class:'modal'});
-  m.appendChild(div({class:'hdl'}));
-
-  function fi(lbl,key,placeholder,type='text'){
-    const i=inp({type,placeholder,value:_mData[key]||'',style:{padding:'12px 15px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none'}});
-    i.addEventListener('input',()=>_mData[key]=type==='number'?Number(i.value):i.value);
-    i.addEventListener('focus',()=>i.style.borderColor='var(--primary)');
-    i.addEventListener('blur',()=>i.style.borderColor='var(--border)');
-    return div({style:{marginBottom:14}},label({style:{display:'block',fontSize:13,fontWeight:600,marginBottom:6}},lbl),i);
-  }
-  function fs(lbl,key,options){
-    const s=sel({style:{padding:'12px 15px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14}});
-    options.forEach(([v,t])=>{const o=opt({value:v},t);if(_mData[key]===v)o.selected=true;s.appendChild(o);});
-    s.addEventListener('change',()=>_mData[key]=s.value);
-    return div({style:{marginBottom:0}},label({style:{display:'block',fontSize:13,fontWeight:600,marginBottom:6}},lbl),s,div({style:{marginBottom:14}}));
-  }
-  function fta(lbl,key,placeholder){
-    const t=ta({placeholder,style:{padding:'12px 15px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:80,resize:'vertical',outline:'none',marginBottom:14}});
-    t.value=_mData[key]||'';
-    t.addEventListener('input',()=>_mData[key]=t.value);
-    t.addEventListener('focus',()=>t.style.borderColor='var(--primary)');
-    t.addEventListener('blur',()=>t.style.borderColor='var(--border)');
-    return div(null,label({style:{display:'block',fontSize:13,fontWeight:600,marginBottom:6}},lbl),t);
-  }
-
-  if(_aModal==='addCourse'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add New Course'));
-    m.appendChild(fi('Course Title *','title','e.g. Financial Literacy'));
-    m.appendChild(fi('Description','description','What students will learn'));
-    m.appendChild(fi('Emoji Icon','emoji','💰'));
-    m.appendChild(fi('Color (hex)','color','#1E4976'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_mData.title){alert('Title is required');return;}
-      const row={id:crypto.randomUUID(),title:_mData.title,description:_mData.description||'',emoji:_mData.emoji||'📚',color:_mData.color||'#1E4976',published:false,order_index:S.courses.length+1};
-      const result = await sbPost('courses',row,S.token);
-      if(result.ok || result.status === 201){
-        await reloadCourses();
-        closeModal();
-      } else {
-        alert('Failed to save course. Check console for details. Error: '+(result.data?.message||result.data?.error||'Unknown error'));
-      }
-    }},'Create Course'));
-  }
-
-  else if(_aModal==='addModule'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Module'));
-    m.appendChild(fi('Module Title *','title','e.g. Building Your First Budget'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_mData.title||!_aSelC){alert('Title is required');return;}
-      const row={id:crypto.randomUUID(),course_id:_aSelC.id,title:_mData.title,order_index:(_aSelC.modules||[]).length+1};
-      await sbPost('modules',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
-      closeModal();
-    }},'Add Module'));
-  }
-
-  else if(_aModal==='addLesson'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Lesson'));
-    m.appendChild(fi('Lesson Title *','title','e.g. The 50/30/20 Rule'));
-    m.appendChild(fs('Type *','type',[['text','📄 Text'],['video','🎬 Video'],['link','🔗 Link/Resource'],['quiz','❓ Quiz']]));
-    m.appendChild(fi('XP Reward','xp','10','number'));
-    // Dynamic content field
-    const contentArea=div(null);
-    function updateContentArea(){
-      contentArea.innerHTML='';
-      const t=_mData.type||'text';
-      if(t==='text') contentArea.appendChild(fta('Content (use \\n for new lines)','content','Lesson text...'));
-      else if(t==='video') contentArea.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
-      else if(t==='link') contentArea.appendChild(fi('Resource URL','content','https://...'));
-    }
-    updateContentArea();
-    // Re-render content area when type changes
-    const typeSelect=m.querySelector('select');
-    if(typeSelect) typeSelect.addEventListener('change',()=>{_mData.type=typeSelect.value;updateContentArea();});
-    m.appendChild(contentArea);
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_mData.title||!_aSelM){alert('Title is required');return;}
-      const row={id:crypto.randomUUID(),module_id:_aSelM.id,title:_mData.title,lesson_type:_mData.type||'text',content:_mData.content||'',xp_reward:Number(_mData.xp)||10,order_index:(_aSelM.lessons||[]).length+1};
-      await sbPost('lessons',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
-      _aSelM=(_aSelC.modules||[]).find(m=>m.id===_aSelM.id)||_aSelM;
-      closeModal();
-    }},'Add Lesson'));
-  }
-
-  else if(_aModal==='addQuestion'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Quiz Question'));
-    m.appendChild(fta('Question *','text','Type your question here...'));
-    m.appendChild(fi('Option A *','optA','First answer choice'));
-    m.appendChild(fi('Option B *','optB','Second answer choice'));
-    m.appendChild(fi('Option C *','optC','Third answer choice'));
-    m.appendChild(fi('Option D *','optD','Fourth answer choice'));
-    m.appendChild(fs('Correct Answer *','correct',[['A','A — First option'],['B','B — Second option'],['C','C — Third option'],['D','D — Fourth option']]));
-    m.appendChild(fta('Explanation','exp','Why is this the correct answer?'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_mData.text||!_mData.optA||!_mData.optB||!_mData.optC||!_mData.optD){alert('Please fill in the question and all 4 options.');return;}
-      const row={id:crypto.randomUUID(),lesson_id:_aSelL.id,question_text:_mData.text,option_a:_mData.optA,option_b:_mData.optB,option_c:_mData.optC,option_d:_mData.optD,correct_answer:_mData.correct||'A',explanation:_mData.exp||'',order_index:(_aSelL.questions||[]).length+1};
-      await sbPost('questions',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
-      _aSelM=(_aSelC.modules||[]).find(mod=>mod.id===_aSelM.id)||_aSelM;
-      _aSelL=(_aSelM.lessons||[]).find(l=>l.id===_aSelL.id)||_aSelL;
-      closeModal();
-    }},'Add Question'));
-  }
-
-  m.appendChild(btn({class:'btn btn-g',style:{marginTop:4},'click':closeModal},'Cancel'));
-
-  const overlay=div({class:'modal-bg','click':closeModal});
-  overlay.appendChild(m);
-  m.addEventListener('click',e=>e.stopPropagation());
-  return overlay;
-}
-
-async function reloadCourses(){
-  console.log('Reloading courses, token:', S.token ? 'present' : 'null');
-  const courses = await loadCourses(S.token, false);
-  console.log('Loaded', courses.length, 'courses');
-  S.courses = courses;
-}
 
 // ── START ─────────────────────────────────────────────────────────────────────
 S.init();
