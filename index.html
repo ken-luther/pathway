@@ -457,9 +457,15 @@ function showSplash() {
         S.saveToken(res.data.access_token);
         const u={id:res.data.user.id,email:e,name:res.data.user.user_metadata?.name||e.split('@')[0],xp_total:0,isAdmin:e===ADMIN};
         // Load full profile from Supabase
+        let prof=null;
         const pr=await sbGet('profiles','?id=eq.'+res.data.user.id,res.data.access_token);
-        if(pr.ok&&pr.data&&pr.data[0]){
-          const prof=pr.data[0];
+        if(pr.ok&&Array.isArray(pr.data)&&pr.data[0]){
+          prof=pr.data[0];
+        } else {
+          const pr2=await sbGet('profiles','?email=eq.'+encodeURIComponent(e),res.data.access_token);
+          if(pr2.ok&&Array.isArray(pr2.data)&&pr2.data[0]) prof=pr2.data[0];
+        }
+        if(prof){
           u.name=prof.full_name||u.name;
           u.full_name=prof.full_name||u.name;
           u.xp_total=prof.xp_total||0;
@@ -470,8 +476,12 @@ function showSplash() {
           u.employment=prof.employment||null;
           u.resume_url=prof.resume_url||null;
           u.avatar_url=prof.avatar_url||null;
-          // Always use real Supabase ID, not local_ fake ID
           u.id=prof.id||res.data.user.id;
+        } else {
+          u.id=res.data.user.id;
+          u.profile_emoji='😊';
+          const newP={id:res.data.user.id,email:e,full_name:u.name,profile_emoji:'😊',xp_total:0,is_admin:e===ADMIN,onboarding_complete:true};
+          await sbPost('profiles',newP,res.data.access_token);
         }
         S.saveUser(u);showMainApp();
       } else {
@@ -1333,33 +1343,37 @@ function renderEditProfile() {
       S.user.employment = vals.job_interest;
       S.user.profile_emoji = selectedEmoji;
       localStorage.setItem('pw_u',JSON.stringify(S.user));
-      // Save to Supabase using upsert by email - works regardless of ID type
+      // Save to Supabase — upsert by email so it always works
       try {
-        // First get the real profile ID from Supabase by email
-        const findRes = await sbGet('profiles','?email=eq.'+encodeURIComponent(S.user.email), S.token||undefined);
-        if(findRes.ok && findRes.data && findRes.data[0]) {
-          const realId = findRes.data[0].id;
-          // Update with real ID
-          const updateRes = await sbPatch('profiles','?id=eq.'+realId, {
-            full_name:vals.name.trim(),
-            grade:vals.grade||null,
-            job_interest:vals.job_interest||null,
-            employment:vals.job_interest||null,
-            employment_status:vals.job_interest||null,
-            resume_url:S.user.resume_url||null,
-            profile_emoji:selectedEmoji,
-          }, S.token||undefined);
-          console.log('Profile update:', updateRes.ok, updateRes.status);
-          // Update local with confirmed data
-          S.user.id = realId; // Store real ID for future use
+        const profileData = {
+          email: S.user.email,
+          full_name: vals.name.trim(),
+          grade: vals.grade||null,
+          job_interest: vals.job_interest||null,
+          employment: vals.job_interest||null,
+          employment_status: vals.job_interest||null,
+          profile_emoji: selectedEmoji,
+          resume_url: S.user.resume_url||null,
+          xp_total: S.user.xp_total||0,
+          is_admin: S.user.email===ADMIN,
+          onboarding_complete: true,
+        };
+        // Use upsert on email column — creates or updates regardless of ID
+        const headers = {...H, 'Prefer':'resolution=merge-duplicates,return=representation'};
+        const upsertRes = await fetch(SB_URL+'/rest/v1/profiles?on_conflict=email', {
+          method:'POST', headers, body: JSON.stringify(profileData)
+        });
+        const upsertData = await upsertRes.json();
+        console.log('Upsert result:', upsertRes.ok, upsertRes.status, JSON.stringify(upsertData).slice(0,200));
+        if(upsertRes.ok && upsertData && upsertData[0]) {
+          // Update local with what Supabase confirmed
+          S.user.id = upsertData[0].id || S.user.id;
+          S.user.profile_emoji = selectedEmoji;
           S.user.name = vals.name.trim();
           S.user.full_name = vals.name.trim();
           S.user.grade = vals.grade;
           S.user.job_interest = vals.job_interest;
-          S.user.profile_emoji = selectedEmoji;
           localStorage.setItem('pw_u', JSON.stringify(S.user));
-        } else {
-          console.log('Profile not found in Supabase, saving locally only');
         }
       } catch(err) { console.error('Save error:', err); }
       saveBtnEl.textContent='Save Changes';saveBtnEl.disabled=false;
