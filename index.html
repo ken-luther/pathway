@@ -469,6 +469,7 @@ function showSplash() {
           u.name=prof.full_name||u.name;
           u.full_name=prof.full_name||u.name;
           u.xp_total=prof.xp_total||0;
+          // Will sync progress-based XP after courses load
           u.isAdmin=prof.is_admin||e===ADMIN;
           u.profile_emoji=prof.profile_emoji||'😊';
           u.grade=prof.grade||null;
@@ -615,6 +616,15 @@ async function showMainApp() {
   // Load courses from Supabase
   const courses=await loadCourses(S.token, !S.user?.isAdmin);
   S.courses=courses;
+  // Sync XP: if progress-based XP differs from stored, update Supabase
+  const progressXP = S.totalXP;
+  if(S.user && progressXP !== S.user.xp_total) {
+    S.user.xp_total = progressXP;
+    localStorage.setItem('pw_u', JSON.stringify(S.user));
+    if(S.user.id && S.token && !String(S.user.id).startsWith('local_')) {
+      sbPatch('profiles','?id=eq.'+S.user.id,{xp_total:progressXP},S.token);
+    }
+  }
   renderApp();
 }
 
@@ -1324,8 +1334,8 @@ function renderEditProfile() {
         if(vals[key]===o) op.selected=true;
         s.appendChild(op);
       });
-      // Set initial value immediately so save works without changing dropdown
-      vals[key] = s.value || vals[key] || '';
+      // Read AFTER options appended - s.value now reflects selected option
+      if(s.value) vals[key] = s.value;
       s.addEventListener('change',()=>{ vals[key]=s.value; });
       s.addEventListener('focus',()=>s.style.borderColor='var(--primary)');
       s.addEventListener('blur',()=>s.style.borderColor='var(--border)');
@@ -1356,7 +1366,7 @@ function renderEditProfile() {
           employment_status: vals.job_interest||null,
           profile_emoji: selectedEmoji,
           resume_url: S.user.resume_url||null,
-          xp_total: S.user.xp_total||0,
+          xp_total: S.totalXP||S.user.xp_total||0,
           is_admin: S.user.email===ADMIN,
           onboarding_complete: true,
         };
