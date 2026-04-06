@@ -456,28 +456,20 @@ function showSplash() {
       if(res.ok&&res.data.access_token){
         S.saveToken(res.data.access_token);
         const u={id:res.data.user.id,email:e,name:res.data.user.user_metadata?.name||e.split('@')[0],xp_total:0,isAdmin:e===ADMIN};
-        // Load full profile from Supabase
-        let prof=null;
-        const pr=await sbGet('profiles','?id=eq.'+res.data.user.id,res.data.access_token);
-        if(pr.ok&&Array.isArray(pr.data)&&pr.data[0]){
-          prof=pr.data[0];
-        } else {
-          const pr2=await sbGet('profiles','?email=eq.'+encodeURIComponent(e),res.data.access_token);
-          if(pr2.ok&&Array.isArray(pr2.data)&&pr2.data[0]) prof=pr2.data[0];
-        }
+        // Load full profile from Supabase — always by email for consistency
+        const pr=await sbGet('profiles','?email=eq.'+encodeURIComponent(e),res.data.access_token);
+        const prof = pr.ok&&Array.isArray(pr.data)&&pr.data[0] ? pr.data[0] : null;
         if(prof){
+          u.id=prof.id;
           u.name=prof.full_name||u.name;
           u.full_name=prof.full_name||u.name;
           u.xp_total=prof.xp_total||0;
-          // Will sync progress-based XP after courses load
           u.isAdmin=prof.is_admin||e===ADMIN;
           u.profile_emoji=prof.profile_emoji||'😊';
           u.grade=prof.grade||null;
           u.job_interest=prof.job_interest||prof.employment||prof.employment_status||null;
           u.employment=prof.employment||null;
           u.resume_url=prof.resume_url||null;
-          u.avatar_url=prof.avatar_url||null;
-          u.id=prof.id||res.data.user.id;
         } else {
           u.id=res.data.user.id;
           u.profile_emoji='😊';
@@ -1347,6 +1339,11 @@ function renderEditProfile() {
     const saveBtnEl = btn({class:'btn btn-p','click':async function(){
       if(!vals.name.trim()){alert('Name cannot be empty.');return;}
       saveBtnEl.innerHTML='<div class="spin"></div>';saveBtnEl.disabled=true;
+      console.log('SAVE VALS:', JSON.stringify(vals));
+      console.log('SAVE EMOJI:', selectedEmoji);
+      console.log('USER EMAIL:', S.user.email);
+      console.log('USER ID:', S.user.id);
+      console.log('TOKEN:', S.token ? S.token.slice(0,20)+'...' : 'NULL');
       // Update local user object
       S.user.name = vals.name.trim();
       S.user.full_name = vals.name.trim();
@@ -1376,7 +1373,9 @@ function renderEditProfile() {
           method:'POST', headers, body: JSON.stringify(profileData)
         });
         const upsertData = await upsertRes.json();
-        console.log('Upsert result:', upsertRes.ok, upsertRes.status, JSON.stringify(upsertData).slice(0,200));
+        console.log('Upsert result:', upsertRes.ok, upsertRes.status);
+        console.log('Upsert data:', JSON.stringify(upsertData).slice(0,300));
+        if(!upsertRes.ok) console.error('UPSERT FAILED:', JSON.stringify(upsertData));
         if(upsertRes.ok && upsertData && upsertData[0]) {
           // Update local with what Supabase confirmed
           S.user.id = upsertData[0].id || S.user.id;
