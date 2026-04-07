@@ -2041,17 +2041,12 @@ this.token = localStorage.getItem(‘pw_t’)||null;
 }
 };
 S.init();
-(async()=>{
+// Always go to splash - if user has email pre-fill it on login screen
 if(S.user && S.user.email) {
-// Always re-authenticate on app open to get fresh data
-// Pre-fill the login form with saved email so user just needs password
 _step = ‘login’;
-_form.email = S.user.email;
-showSplash();
-} else {
-showSplash();
+_form = {email: S.user.email, password: ‘’, name: S.user.name || ‘’};
 }
-})();
+showSplash();
 </script>
 
 </body>
