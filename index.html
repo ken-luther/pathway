@@ -459,7 +459,7 @@ submitB.innerHTML=’<div class="spin"></div>’;
 submitB.disabled=true;
 const e=_form.email.trim().toLowerCase();
 // Always try Supabase for fresh data and token
-const res=await sbSignIn(e,_form.password);
+const res=await sbSignIn(e,*form.password);
 if(res.ok&&res.data.access_token){
 S.saveToken(res.data.access_token);
 const u={id:res.data.user.id,email:e,name:res.data.user.user_metadata?.name||e.split(’@’)[0],xp_total:0,isAdmin:e===ADMIN};
@@ -483,6 +483,13 @@ u.id=res.data.user.id;
 u.profile_emoji=‘😊’;
 const newP={id:res.data.user.id,email:e,full_name:u.name,profile_emoji:‘😊’,xp_total:0,is_admin:e===ADMIN,onboarding_complete:true};
 await sbPost(‘profiles’,newP,res.data.access_token);
+}
+// Load badges into localStorage so profile tab matches leaderboard
+if(u.id && !String(u.id).startsWith(’local*’)) {
+const br = await sbGet(‘user_badges’,’?user_id=eq.’+u.id+’&order=earned_at.desc’,res.data.access_token);
+if(br.ok && Array.isArray(br.data)) {
+localStorage.setItem(‘pw_badges’, JSON.stringify(br.data));
+}
 }
 S.saveUser(u);showMainApp();
 } else {
@@ -1046,7 +1053,9 @@ document.getElementById(‘app’).appendChild(overlay);
 }
 
 function ProfileTab(allLessons,doneLessons,totalXP,level) {
-const badges=S.getBadges();
+// Load badges fresh - merge Supabase (if available) with localStorage
+const lsBadges = S.getBadges();
+const badges = lsBadges;
 const pRows=S.courses.filter(c=>c.published).map(c=>{
 const ls=c.modules.flatMap(m=>m.lessons),d=ls.filter(l=>S.isDone(l.id)).length,pct=ls.length>0?Math.round((d/ls.length)*100):0;
 return div({style:{marginBottom:10}},
@@ -2033,40 +2042,15 @@ this.token = localStorage.getItem(‘pw_t’)||null;
 };
 S.init();
 (async()=>{
-if(S.user){
-// Always refresh profile from Supabase on app open
-if(S.user.email && S.token) {
-try {
-const pr = await fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),
-{headers:{…H,‘Authorization’:‘Bearer ‘+S.token}});
-if(pr.ok) {
-const data = await pr.json();
-if(Array.isArray(data) && data[0]) {
-const prof = data[0];
-S.user.id = prof.id || S.user.id;
-S.user.name = prof.full_name || S.user.name;
-S.user.full_name = prof.full_name || S.user.name;
-S.user.xp_total = prof.xp_total || 0;
-S.user.profile_emoji = prof.profile_emoji || S.user.profile_emoji || ‘😊’;
-S.user.grade = prof.grade || null;
-S.user.job_interest = prof.job_interest || prof.employment || null;
-S.user.resume_url = prof.resume_url || null;
-S.user.isAdmin = prof.is_admin || S.user.email === ADMIN;
-localStorage.setItem(‘pw_u’, JSON.stringify(S.user));
+if(S.user && S.user.email) {
+// Always re-authenticate on app open to get fresh data
+// Pre-fill the login form with saved email so user just needs password
+_step = ‘login’;
+_form.email = S.user.email;
+showSplash();
+} else {
+showSplash();
 }
-}
-// Also refresh badges
-const br = await fetch(SB_URL+’/rest/v1/user_badges?user_id=eq.’+(S.user.id)+’&order=earned_at.desc’,
-{headers:{…H,‘Authorization’:’Bearer ’+S.token}});
-if(br.ok) {
-const badges = await br.json();
-if(Array.isArray(badges)) localStorage.setItem(‘pw_badges’, JSON.stringify(badges));
-}
-} catch(e) { console.log(‘Profile refresh failed:’, e.message); }
-}
-await showMainApp();
-}
-else { showSplash(); }
 })();
 </script>
 
