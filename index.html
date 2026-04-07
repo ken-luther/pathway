@@ -5,7 +5,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>Pathway</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{
   --navy:#0D2461;--primary:#1A56DB;--primary-light:#EEF4FF;
@@ -2041,12 +2041,27 @@ this.token = localStorage.getItem(‘pw_t’)||null;
 }
 };
 S.init();
+try {
 // Always go to splash - if user has email pre-fill it on login screen
 if(S.user && S.user.email) {
 _step = ‘login’;
 _form = {email: S.user.email, password: ‘’, name: S.user.name || ‘’};
 }
 showSplash();
+} catch(e) {
+console.error(‘Startup error:’, e);
+// Fallback: clear everything and show welcome screen
+localStorage.removeItem(‘pw_u’);
+localStorage.removeItem(‘pw_t’);
+S.user = null;
+S.token = null;
+_step = ‘welcome’;
+_form = {email:’’,password:’’,name:’’};
+try { showSplash(); } catch(e2) {
+document.getElementById(‘app’).innerHTML = ‘<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:16px;font-family:sans-serif;"><div style="font-size:48px">💰</div><p style="color:#64748B">Tap to reload</p></div>’;
+document.getElementById(‘app’).onclick = ()=>location.reload();
+}
+}
 </script>
 
 </body>
