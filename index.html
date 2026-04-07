@@ -164,7 +164,7 @@ return { ok: r.ok, data: d, status: r.status };
 
 function authH(token) {
 // Always use anon key as base, upgrade with user token if available
-const headers = {…H};
+var headers = {}; for (var _k in H) headers[_k] = H[_k];
 if (token) headers[‘Authorization’] = ’Bearer ’ + token;
 return headers;
 }
@@ -186,7 +186,7 @@ const ext = file.name.split(’.’).pop().toLowerCase();
 const path = userId+’.’+ext;
 const r = await fetch(SB_URL+’/storage/v1/object/avatars/’+path, {
 method:‘POST’,
-headers:{…authH(token),‘Content-Type’:file.type,‘x-upsert’:‘true’},
+headers:(function(){var _h=authH(S.token);_h[‘Content-Type’]=file.type;_h[‘x-upsert’]=‘true’;return _h;})(),
 body:file
 });
 if(!r.ok){console.error(‘Avatar upload failed’);return null;}
@@ -220,16 +220,16 @@ localStorage.setItem(‘pw_badges’,JSON.stringify(badges));
 return r.ok;
 }
 async function sbGet(table, query, token) {
-return api(’/rest/v1/’+table+(query||’’), { headers:{…authH(token),‘Accept’:‘application/json’} });
+return api(’/rest/v1/’+table+(query||’’), { headers:(function(){var _h={}; var _src=authH(token); for(var _k in _src)_h[_k]=_src[_k]; _h[‘Accept’]=‘application/json’; return _h;})() });
 }
 async function sbPost(table, body, token) {
-const headers = {…authH(token), ‘Prefer’:‘resolution=merge-duplicates,return=representation’};
+const headers = (function(){var _h={}; var _src=authH(token); for(var _k in _src)_h[_k]=_src[_k]; _h[‘Prefer’]=‘resolution=merge-duplicates,return=representation’; return _h;})();
 const result = await api(’/rest/v1/’+table, { method:‘POST’, headers, body:JSON.stringify(body) });
 if(!result.ok) console.error(‘sbPost failed on ‘+table+’:’, JSON.stringify(result.data));
 return result;
 }
 async function sbPatch(table, query, body, token) {
-const headers = {…authH(token), ‘Prefer’:‘return=representation’};
+const headers = (function(){var _h={}; var _src=authH(token); for(var _k in _src)_h[_k]=_src[_k]; _h[‘Prefer’]=‘return=representation’; return _h;})();
 return api(’/rest/v1/’+table+(query||’’), { method:‘PATCH’, headers, body:JSON.stringify(body) });
 }
 async function sbDelete(table, query, token) {
@@ -292,7 +292,7 @@ localStorage.setItem(‘pw_u’,JSON.stringify(this.user));
 // Sync to Supabase by email (most reliable)
 if(this.user.email&&this.token){
 fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(this.user.email),
-{method:‘PATCH’,headers:{…H,‘Prefer’:‘return=minimal’},body:JSON.stringify({xp_total:realXP})});
+{method:‘PATCH’,headers:(function(){var _h={}; var _src=H; for(var _k in _src)_h[_k]=_src[_k]; _h[‘Prefer’]=‘return=minimal’; return _h;})(),body:JSON.stringify({xp_total:realXP})});
 }
 // Check if any course is now fully complete
 this.checkCourseCompletion(id);
@@ -308,11 +308,11 @@ if(allDone){
 const badges=this.getBadges();
 if(!badges.find(b=>b.course_id===course.id)){
 // Award badge!
-if(this.user?.id&&this.token){
+if(this.user&&this.user.id&&this.token){
 awardBadge(this.user.id,course.id,course.title,course.emoji||‘🏆’,this.token);
 } else {
 // Local only
-const row={id:‘b’+Date.now(),user_id:this.user?.id||‘local’,course_id:course.id,course_title:course.title,emoji:course.emoji||‘🏆’,earned_at:new Date().toISOString()};
+const row={id:‘b’+Date.now(),user_id:(this.user&&this.user.id)||‘local’,course_id:course.id,course_title:course.title,emoji:course.emoji||‘🏆’,earned_at:new Date().toISOString()};
 const existing=this.getBadges();
 existing.push(row);
 localStorage.setItem(‘pw_badges’,JSON.stringify(existing));
@@ -469,7 +469,7 @@ const e=_form.email.trim().toLowerCase();
 const res=await sbSignIn(e,*form.password);
 if(res.ok&&res.data.access_token){
 S.saveToken(res.data.access_token);
-const u={id:res.data.user.id,email:e,name:res.data.user.user_metadata?.name||e.split(’@’)[0],xp_total:0,isAdmin:e===ADMIN};
+const u={id:res.data.user.id,email:e,name:(res.data.user.user_metadata&&res.data.user.user_metadata.name)||’’||(e||’’).split(’@’)[0],xp_total:0,isAdmin:e===ADMIN};
 // Load full profile from Supabase — always by email for consistency
 const pr=await sbGet(‘profiles’,’?email=eq.’+encodeURIComponent(e),res.data.access_token);
 const prof = pr.ok&&Array.isArray(pr.data)&&pr.data[0] ? pr.data[0] : null;
@@ -631,7 +631,7 @@ let _quiz={cur:0,sel:null,answered:false,score:0,done:false};
 
 async function showMainApp() {
 // Load courses from Supabase
-const courses=await loadCourses(S.token, !S.user?.isAdmin);
+const courses=await loadCourses(S.token, !S.user && S.user.isAdmin);
 S.courses=courses;
 // Sync badges from Supabase into localStorage
 if(S.user && S.user.id && !String(S.user.id).startsWith(‘local_’)) {
@@ -647,7 +647,7 @@ S.user.xp_total = progressXP;
 localStorage.setItem(‘pw_u’, JSON.stringify(S.user));
 if(S.user.email && S.token) {
 fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),
-{method:‘PATCH’,headers:{…H,‘Prefer’:‘return=minimal’},body:JSON.stringify({xp_total:progressXP})});
+{method:‘PATCH’,headers:(function(){var _h={}; var _src=H; for(var _k in _src)_h[_k]=_src[_k]; _h[‘Prefer’]=‘return=minimal’; return _h;})(),body:JSON.stringify({xp_total:progressXP})});
 }
 }
 renderApp();
@@ -730,7 +730,7 @@ return div({class:‘screen’},
 div({class:‘hero’},
 div({style:{display:‘flex’,justifyContent:‘space-between’,alignItems:‘flex-start’}},
 div(null,p({style:{color:‘rgba(255,255,255,.6)’,fontSize:11,marginBottom:2}},‘Good to see you,’),
-h(‘h2’,{style:{color:’#fff’,fontSize:24,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400}},(S.user.name||S.user.email?.split(’@’)[0]||’’)+ ’ 👋’)
+h(‘h2’,{style:{color:’#fff’,fontSize:24,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400}},(S.user.name||S.user.email&&S.user.email.split(’@’)[0]||’’)+ ’ 👋’)
 ),
 span({class:‘xpb’},‘⚡ ‘,totalXP,’ XP’)
 ),
@@ -850,7 +850,7 @@ if(_lbView === 'global') {
       avatarEl,
       div({style:{flex:1,minWidth:0}},
         div({style:{fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
-          (p2.full_name||p2.email?.split('@')[0]||'User')+(isMe?' (You)':'')
+          (p2.full_name||p2.email && p2.email.split('@')[0]||'User')+(isMe?' (You)':'')
         ),
         div({style:{display:'flex',alignItems:'center',gap:8,marginTop:4,flexWrap:'wrap'}},
           span({style:{fontSize:12,fontWeight:700,color:'var(--amber)'}}, '⚡ '+(p2.xp_total||0)+' XP'),
@@ -890,7 +890,7 @@ if(_lbView === 'global') {
           if(!r.ok||!r.data||!r.data[0]){alert('Class not found. Double-check the code.');jb.textContent='Join';jb.disabled=false;return;}
           const cls=r.data[0];
           const members=[...(cls.member_ids||[])];
-          if(members.includes(S.user?.id)){alert('You are already in this class!');jb.textContent='Join';jb.disabled=false;return;}
+          if(members.includes(S.user && S.user.id)){alert('You are already in this class!');jb.textContent='Join';jb.disabled=false;return;}
           members.push(S.user.id);
           await sbPatch('classes','?id=eq.'+cls.id,{member_ids:members},S.token);
           ci.value='';jb.textContent='Join';jb.disabled=false;
@@ -909,14 +909,14 @@ if(_lbView === 'global') {
     ));
   } else {
     classes.forEach(cls => {
-      const isMember = cls.member_ids && Array.isArray(cls.member_ids) && cls.member_ids.includes(S.user?.id);
-      const isOwner = cls.created_by === S.user?.id;
+      const isMember = cls.member_ids && Array.isArray(cls.member_ids) && cls.member_ids.includes(S.user && S.user.id);
+      const isOwner = cls.created_by === S.user && S.user.id;
       classArea.appendChild(div({class:'card',style:{marginBottom:10,cursor:'pointer'},'click':()=>{_lbSelClass=cls;renderClassDetail(profiles,allBadges,load);}},
         div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}},
           div(null,
             div({style:{fontWeight:700,fontSize:15}},cls.name),
             div({style:{fontSize:12,color:'var(--muted)',marginTop:2}},
-              (cls.member_ids?.length||0)+' members · Code: ',
+              ((Array.isArray(cls.member_ids)?cls.member_ids.length:0))+' members · Code: ',
               span({style:{fontWeight:700,color:'var(--primary)',letterSpacing:'.05em'}},cls.code)
             )
           ),
@@ -977,7 +977,7 @@ div({class:‘screen’},
 div({style:{background:‘linear-gradient(160deg,var(–navy),#1A4080)’,padding:‘44px 22px 28px’,textAlign:‘center’,color:’#fff’}},
 btn({class:‘btn btn-g’,style:{color:‘rgba(255,255,255,.7)’,width:‘auto’,marginBottom:16,padding:‘6px 0’,textAlign:‘left’},‘click’:()=>{_lbSelProfile=null;S.tab=‘board’;renderApp();}},‘← Back’),
 div({style:{fontSize:56,margin:‘0 auto 10px’,lineHeight:1,textAlign:‘center’}},(p2.profile_emoji||‘😊’)),
-h(‘h2’,{style:{color:’#fff’,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400,fontSize:22}},p2.full_name||p2.email?.split(’@’)[0]||‘User’),
+h(‘h2’,{style:{color:’#fff’,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400,fontSize:22}},p2.full_name||p2.email && p2.email.split(’@’)[0]||‘User’),
 p2.grade ? p({style:{color:‘rgba(255,255,255,.65)’,fontSize:13,marginTop:4}},p2.grade) : null,
 span({class:‘xpb’,style:{marginTop:12,display:‘inline-flex’}},‘⚡ ‘+(p2.xp_total||0)+’ XP’)
 ),
@@ -991,7 +991,7 @@ h(‘h3’,{style:{marginBottom:14,fontSize:16}},‘🏆 Badges’),
 badges.length ? div({style:{display:‘flex’,flexWrap:‘wrap’,gap:12}},
 …badges.map(b=>div({style:{display:‘flex’,flexDirection:‘column’,alignItems:‘center’,gap:5,width:68,textAlign:‘center’}},
 div({style:{width:52,height:52,borderRadius:14,background:‘linear-gradient(135deg,#FEF9C3,#FDE68A)’,display:‘flex’,alignItems:‘center’,justifyContent:‘center’,fontSize:26,boxShadow:‘0 3px 10px rgba(245,159,0,.2)’,border:‘2px solid #F59F00’}},(b.emoji||‘🏆’)),
-span({style:{fontSize:10,fontWeight:700,color:‘var(–text)’,lineHeight:1.3}},b.course_title?.slice(0,14)||‘Badge’)
+span({style:{fontSize:10,fontWeight:700,color:‘var(–text)’,lineHeight:1.3}},b.course_title && b.course_title.slice(0,14)||‘Badge’)
 ))
 ) : p({style:{color:‘var(–muted)’,fontSize:14,textAlign:‘center’,padding:‘16px 0’}},‘No badges yet.’)
 )
@@ -1020,7 +1020,7 @@ return div({class:‘card’,style:{marginBottom:8,padding:‘12px 14px’,curso
 div({style:{width:28,textAlign:‘center’,fontSize:i<3?20:14,fontWeight:700,color:i<3?‘inherit’:‘var(–muted)’,flexShrink:0}},i<3?medals[i]:’#’+(i+1)),
 div({style:{width:44,height:44,borderRadius:‘50%’,background:‘linear-gradient(135deg,var(–primary),var(–teal))’,display:‘flex’,alignItems:‘center’,justifyContent:‘center’,fontSize:22,flexShrink:0,border:‘2px solid var(–border)’}},(p2.profile_emoji||‘😊’)),
 div({style:{flex:1,minWidth:0}},
-div({style:{fontWeight:700,fontSize:14,overflow:‘hidden’,textOverflow:‘ellipsis’,whiteSpace:‘nowrap’}},p2.full_name||p2.email?.split(’@’)[0]||‘User’),
+div({style:{fontWeight:700,fontSize:14,overflow:‘hidden’,textOverflow:‘ellipsis’,whiteSpace:‘nowrap’}},p2.full_name||p2.email && p2.email.split(’@’)[0]||‘User’),
 div({style:{fontSize:12,color:‘var(–muted)’,marginTop:3}},‘⚡ ‘+(p2.xp_total||0)+’ XP · 🏆 ‘+userBadges.length+’ badges’)
 ),
 span({style:{color:‘var(–muted)’,fontSize:16}},’›’)
@@ -1045,7 +1045,7 @@ const createB = btn({class:‘btn btn-p’,‘click’:async function(){
 if(!className.trim()){alert(‘Enter a class name’);return;}
 createB.innerHTML=’<div class="spin"></div>’;createB.disabled=true;
 const code = Math.random().toString(36).substring(2,7).toUpperCase();
-const row = {id:crypto.randomUUID(),name:className.trim(),code,created_by:S.user?.id||’’,member_ids:[S.user?.id||’’],created_at:new Date().toISOString()};
+const row = {id:crypto.randomUUID(),name:className.trim(),code,created_by:S.user && S.user.id||’’,member_ids:[S.user && S.user.id||’’],created_at:new Date().toISOString()};
 await sbPost(‘classes’,row,S.token);
 overlay.remove();
 onDone();
@@ -1087,7 +1087,7 @@ div({style:{position:‘absolute’,top:-40,right:-40,width:160,height:160,borde
 div({style:{position:‘absolute’,bottom:-60,left:-30,width:180,height:180,borderRadius:‘50%’,background:‘rgba(255,255,255,.04)’}}),
 div({style:{position:‘relative’,zIndex:1}},
 avatarContainer,
-h(‘h2’,{style:{color:’#fff’,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400,fontSize:24}},S.user.name||S.user.email?.split(’@’)[0]||’’),
+h(‘h2’,{style:{color:’#fff’,fontFamily:”‘DM Serif Display’,serif”,fontWeight:400,fontSize:24}},S.user.name||S.user.email&&S.user.email.split(’@’)[0]||’’),
 p({style:{color:‘rgba(255,255,255,.65)’,fontSize:13,marginTop:4}},S.user.email||’’),
 span({class:‘xpb’,style:{marginTop:14,display:‘inline-flex’}},‘⚡ Level ‘+level+’ · ‘+totalXP+’ XP’)
 )
@@ -1118,7 +1118,7 @@ div({style:{padding:'18px 20px 40px'}},
     badges.length ? div({style:{display:'flex',flexWrap:'wrap',gap:12}},
       ...badges.map(b=>div({style:{display:'flex',flexDirection:'column',alignItems:'center',gap:6,width:70,textAlign:'center'}},
         div({style:{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#FEF9C3,#FDE68A)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,boxShadow:'0 3px 10px rgba(245,159,0,.25)',border:'2px solid #F59F00'}},(b.emoji||'🏆')),
-        span({style:{fontSize:10,fontWeight:700,color:'var(--text)',lineHeight:1.3}},b.course_title?.slice(0,14)||'Course')
+        span({style:{fontSize:10,fontWeight:700,color:'var(--text)',lineHeight:1.3}},b.course_title && b.course_title.slice(0,14)||'Course')
       ))
     ) : div({style:{textAlign:'center',padding:'20px 0'}},
         div({style:{fontSize:44,marginBottom:10}},'🎯'),
@@ -1294,9 +1294,9 @@ function renderEditProfile() {
 // Pre-fill from user object and survey data
 const u = S.user;
 let vals = {
-name: u.name || u.full_name || u.email?.split(’@’)[0] || ‘’,
-grade: u.grade || u.survey?.grade || ‘’,
-job_interest: u.job_interest || u.employment || u.survey?.employment || ‘’,
+name: u.name || u.full_name || (u.email&&u.email.split(’@’)[0])||’’ || ‘’,
+grade: u.grade || (u.survey&&u.survey.grade)||’’ || ‘’,
+job_interest: u.job_interest || u.employment || (u.survey&&u.survey.employment)||’’ || ‘’,
 };
 let uploadStatus = ‘’;
 let saveMsg = ‘’;
@@ -1415,7 +1415,7 @@ const saveBtnEl = btn({class:'btn btn-p','click':async function(){
     // PATCH by email - most reliable approach
     const patchRes = await fetch(
       SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(S.user.email),
-      { method:'PATCH', headers:{...H,'Prefer':'return=representation'}, body:JSON.stringify(profileData) }
+      { method:'PATCH', headers:(function(){var _h={}; var _src=H; for(var _k in _src)_h[_k]=_src[_k]; _h['Prefer']='return=representation'; return _h;})(), body:JSON.stringify(profileData) }
     );
     const patchData = await patchRes.json();
     console.log('PATCH result:', patchRes.ok, patchRes.status);
@@ -1492,7 +1492,7 @@ return div({style:{display:'flex',flexDirection:'column',height:'100%'}},
           try{
             const ext=file.name.split('.').pop();
             const path='resumes/'+(S.user.id||'local')+'_resume.'+ext;
-            const r=await fetch(SB_URL+'/storage/v1/object/avatars/'+path,{method:'POST',headers:{...authH(S.token),'Content-Type':file.type,'x-upsert':'true'},body:file});
+            const r=await fetch(SB_URL+'/storage/v1/object/avatars/'+path,{method:'POST',headers:(function(){var _h=authH(S.token);_h['Content-Type']=file.type;_h['x-upsert']='true';return _h;})(),body:file});
             if(r.ok){
               const url=SB_URL+'/storage/v1/object/public/avatars/'+path;
               S.user.resume_url=url;
@@ -1596,7 +1596,7 @@ m.appendChild(btn({class:‘btn btn-p’,‘click’:async()=>{
 if(!_adminFormVals.title){alert(‘Title required’);return;}
 await sbPatch(‘modules’,’?id=eq.’+_adminFormVals.id,{title:_adminFormVals.title},S.token);
 await reloadCourses();
-_aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
+_aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
 closeModal();
 }},‘Save Changes’));
 }
@@ -1653,8 +1653,8 @@ xp_reward:Number(_adminFormVals.xp)||10,
 content:_adminFormVals.content||’’,
 },S.token);
 await reloadCourses();
-_aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
-_aSelM=(_aSelC?.modules||[]).find(mod=>mod.id===_aSelM?.id)||_aSelM;
+_aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
+_aSelM=(_aSelC && _aSelC.modules||[]).find(mod=>mod.id===_aSelM && _aSelM.id)||_aSelM;
 closeModal();
 }},‘Save Changes’));
 }
@@ -1673,9 +1673,9 @@ if(!_adminFormVals.text||!_adminFormVals.optA||!_adminFormVals.optB||!_adminForm
 const row={id:crypto.randomUUID(),lesson_id:_aSelL.id,question_text:_adminFormVals.text,option_a:_adminFormVals.optA,option_b:_adminFormVals.optB,option_c:_adminFormVals.optC,option_d:_adminFormVals.optD,correct_answer:_adminFormVals.correct||‘A’,explanation:_adminFormVals.exp||’’,order_index:(_aSelL.questions||[]).length+1};
 await sbPost(‘questions’,row,S.token);
 await reloadCourses();
-_aSelC=S.courses.find(c=>c.id===_aSelC?.id)||_aSelC;
-_aSelM=(_aSelC?.modules||[]).find(mod=>mod.id===_aSelM?.id)||_aSelM;
-_aSelL=(_aSelM?.lessons||[]).find(l=>l.id===_aSelL?.id)||_aSelL;
+_aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
+_aSelM=(_aSelC && _aSelC.modules||[]).find(mod=>mod.id===_aSelM && _aSelM.id)||_aSelM;
+_aSelL=(_aSelM && _aSelM.lessons||[]).find(l=>l.id===_aSelL && _aSelL.id)||_aSelL;
 closeModal();
 }},‘Add Question’));
 }
@@ -2006,7 +2006,7 @@ if(statsTab==='survey') {
         div({style:{display:'flex',gap:8,flexWrap:'wrap'}},
           ...userBadges.map(b=>div({style:{display:'flex',flexDirection:'column',alignItems:'center',gap:3,width:52}},
             div({style:{width:38,height:38,borderRadius:10,background:'#FEF9C3',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,border:'1.5px solid #F59F00'}},b.emoji||'🏆'),
-            span({style:{fontSize:9,textAlign:'center',color:'var(--muted)',lineHeight:1.2}},b.course_title?.slice(0,12)||'Badge')
+            span({style:{fontSize:9,textAlign:'center',color:'var(--muted)',lineHeight:1.2}},b.course_title && b.course_title.slice(0,12)||'Badge')
           ))
         )
       ) : null,
@@ -2022,7 +2022,7 @@ if(statsTab==='survey') {
       div({style:{display:'flex',alignItems:'center',gap:10}},
         div({style:{width:40,height:40,borderRadius:'50%',background:'linear-gradient(135deg,var(--primary),var(--teal))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}},pr.profile_emoji||'😊'),
         div({style:{flex:1,minWidth:0}},
-          div({style:{fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},(pr.full_name||pr.email?.split('@')[0]||'User')+(pr.is_admin?' 👑':'')),
+          div({style:{fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},(pr.full_name||pr.email && pr.email.split('@')[0]||'User')+(pr.is_admin?' 👑':'')),
           div({style:{fontSize:12,color:'var(--muted)',marginTop:2}},pr.email||'','  ·  ⚡'+(pr.xp_total||0)+' XP  ·  🏆'+userBadges.length+' badges')
         ),
         arrow2
