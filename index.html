@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<title>Pathway</title>
+<title>Pathway v3</title>
 <!-- v2.1 -->
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -135,12 +135,18 @@ h3{font-size:16px;font-weight:700;}
 </head>
 <body>
 <div id="app">
-  <div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:16px;background:var(--navy);">
+  <div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:16px;background:#0D2461;">
     <div style="font-size:48px;">💰</div>
-    <div class="spin"></div>
+    <div style="width:24px;height:24px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;"></div>
   </div>
 </div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<noscript><div style="color:#fff;text-align:center;padding:40px;font-family:sans-serif;">Please enable JavaScript to use Pathway.</div></noscript>
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  document.getElementById('app').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;background:#0D2461;padding:20px;text-align:center;font-family:sans-serif;"><div style=\'font-size:40px\'>⚠️</div><p style=\'color:#fff;font-size:16px;font-weight:700\'>Error loading app</p><p style=\'color:rgba(255,255,255,.7);font-size:13px\'>' + msg + ' (line ' + line + ')</p><button onclick=\'localStorage.clear();location.reload()\' style=\'margin-top:12px;padding:12px 24px;background:#1A56DB;color:#fff;border:none;border-radius:10px;font-size:15px;font-family:sans-serif;cursor:pointer\'>Clear & Retry</button></div>';
+  return false;
+};
 const ADMIN = 'ken.luther@icloud.com';
 const SB_URL = 'https://hsunvbdysmvrlgjxuoot.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzdW52YmR5c212cmxnanh1b290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAxODYsImV4cCI6MjA5MDE5NjE4Nn0.b_z-OQN5ZP3wSWpJFrXZf80gI_1f0JF1s0HciY9aRMA';
