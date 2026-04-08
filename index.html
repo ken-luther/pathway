@@ -1533,29 +1533,60 @@ function openModal(type, data){
 function closeModal(){ _aModal=null; _adminFormVals={}; renderAdmin(); }
 
 function renderModal(){
-  const m=div({class:'modal'});
+  var m=div({class:'modal'});
   m.appendChild(div({class:'hdl'}));
 
-  function fi(lbl,key,placeholder,type='text'){
-    const i=h('input',{type,placeholder,value:_adminFormVals[key]||'',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14}});
-    i.addEventListener('input',()=>_adminFormVals[key]=type==='number'?Number(i.value):i.value);
-    i.addEventListener('focus',()=>i.style.borderColor='var(--primary)');
-    i.addEventListener('blur',()=>i.style.borderColor='var(--border)');
-    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),i);
+  function fi(lbl, key, placeholder, type) {
+    if(!type) type='text';
+    var i=h('input',{type:type, placeholder:placeholder||'', value:_adminFormVals[key]||'',
+      style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,
+        fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14}});
+    i.addEventListener('input', function(){_adminFormVals[key] = type==='number' ? Number(i.value) : i.value;});
+    i.addEventListener('focus', function(){i.style.borderColor='var(--primary)';});
+    i.addEventListener('blur',  function(){i.style.borderColor='var(--border)';});
+    var lbl2 = h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}}, lbl);
+    var wrap = div(null); wrap.appendChild(lbl2); wrap.appendChild(i);
+    return wrap;
   }
-  function fs(lbl,key,options){
-    const s=h('select',{style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14,background:'#fff'}});
-    options.forEach(([v,t])=>{const o=h('option',{value:v},t);if(_adminFormVals[key]===v)o.selected=true;s.appendChild(o);});
-    s.addEventListener('change',()=>_adminFormVals[key]=s.value);
-    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),s);
+
+  function fs(lbl, key, options) {
+    var s=h('select',{style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,
+      fontSize:15,fontFamily:'inherit',width:'100%',outline:'none',marginBottom:14,background:'#fff'}});
+    for(var oi=0; oi<options.length; oi++){
+      var v=options[oi][0], t=options[oi][1];
+      var o=h('option',{value:v},t);
+      if(_adminFormVals[key]===v) o.selected=true;
+      s.appendChild(o);
+    }
+    s.addEventListener('change', function(){_adminFormVals[key]=s.value;});
+    var lbl2=h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl);
+    var wrap=div(null); wrap.appendChild(lbl2); wrap.appendChild(s);
+    return wrap;
   }
-  function fta(lbl,key,placeholder){
-    const t=h('textarea',{placeholder,style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:90,resize:'vertical',outline:'none',marginBottom:14}});
+
+  function fta(lbl, key, placeholder) {
+    var t=h('textarea',{placeholder:placeholder||'',
+      style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,
+        fontFamily:'inherit',width:'100%',minHeight:90,resize:'vertical',outline:'none',marginBottom:14}});
     t.value=_adminFormVals[key]||'';
-    t.addEventListener('input',()=>_adminFormVals[key]=t.value);
-    t.addEventListener('focus',()=>t.style.borderColor='var(--primary)');
-    t.addEventListener('blur',()=>t.style.borderColor='var(--border)');
-    return div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl),t);
+    t.addEventListener('input',  function(){_adminFormVals[key]=t.value;});
+    t.addEventListener('focus',  function(){t.style.borderColor='var(--primary)';});
+    t.addEventListener('blur',   function(){t.style.borderColor='var(--border)';});
+    var lbl2=h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7,color:'var(--text)'}},lbl);
+    var wrap=div(null); wrap.appendChild(lbl2); wrap.appendChild(t);
+    return wrap;
+  }
+
+  function saveBtn(label, fn) {
+    var b=btn({class:'btn btn-p'}, label);
+    b.addEventListener('click', function(){
+      b.textContent='Saving...'; b.disabled=true;
+      Promise.resolve().then(fn).catch(function(e){
+        console.error('Save error:',e);
+        b.textContent=label; b.disabled=false;
+      });
+    });
+    return b;
   }
 
   if(_aModal==='editCourse'){
@@ -1565,160 +1596,165 @@ function renderModal(){
     m.appendChild(fi('Emoji Icon','emoji','💰'));
     m.appendChild(fi('Color (hex)','color','#1E4976'));
     m.appendChild(fi('Badge Name','badge_name','e.g. Budget Builder'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title){alert('Title is required');return;}
-      const saveBtn=m.querySelector('.btn-p');
-      if(saveBtn){saveBtn.textContent='Saving...';saveBtn.disabled=true;}
-      await sbPatch('courses','?id=eq.'+_adminFormVals.id,{
+    m.appendChild(saveBtn('Save Changes', function(){
+      if(!_adminFormVals.title){alert('Title is required');return Promise.resolve();}
+      return sbPatch('courses','?id=eq.'+_adminFormVals.id,{
         title:_adminFormVals.title,
         description:_adminFormVals.description||'',
         emoji:_adminFormVals.emoji||'📚',
         color:_adminFormVals.color||'#1E4976',
         badge_name:_adminFormVals.badge_name||_adminFormVals.title
-      },S.token);
-      await reloadCourses();
-      closeModal();
-    }},'Save Changes'));
+      },S.token).then(function(){return reloadCourses();}).then(function(){closeModal();});
+    }));
   }
   else if(_aModal==='addCourse'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add New Course'));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Add New Course'));
     m.appendChild(fi('Course Title *','title','e.g. Financial Literacy'));
     m.appendChild(fi('Description','description','What students will learn'));
     m.appendChild(fi('Emoji Icon','emoji','💰'));
     m.appendChild(fi('Color (hex)','color','#1E4976'));
     m.appendChild(fi('Badge Name','badge_name','e.g. Budget Builder'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title){alert('Title is required');return;}
-      const row={id:genId(),title:_adminFormVals.title,description:_adminFormVals.description||'',emoji:_adminFormVals.emoji||'📚',color:_adminFormVals.color||'#1E4976',badge_name:_adminFormVals.badge_name||_adminFormVals.title,published:false,order_index:S.courses.length+1};
-      const saveBtnEl3=m.querySelector('.btn-p');
-      if(saveBtnEl3){saveBtnEl3.textContent='Saving...';saveBtnEl3.disabled=true;}
-      await sbPost('courses',row,S.token);
-      await reloadCourses();closeModal();
-    }},'Create Course'));
+    m.appendChild(saveBtn('Create Course', function(){
+      if(!_adminFormVals.title){alert('Title is required');return Promise.resolve();}
+      var row={id:genId(),title:_adminFormVals.title,description:_adminFormVals.description||'',
+        emoji:_adminFormVals.emoji||'📚',color:_adminFormVals.color||'#1E4976',
+        badge_name:_adminFormVals.badge_name||_adminFormVals.title,
+        published:false,order_index:S.courses.length+1};
+      return sbPost('courses',row,S.token).then(function(){return reloadCourses();}).then(function(){closeModal();});
+    }));
   }
   else if(_aModal==='addModule'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Module'));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Add Module'));
     m.appendChild(fi('Module Title *','title','e.g. Building Your First Budget'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title||!_aSelC){alert('Title required');return;}
-      const row={id:genId(),course_id:_aSelC.id,title:_adminFormVals.title,order_index:(_aSelC.modules||[]).length+1};
-      const saveBtnEl=m.querySelector('.btn-p');
-      if(saveBtnEl){saveBtnEl.textContent='Saving...';saveBtnEl.disabled=true;}
-      await sbPost('modules',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
-      closeModal();
-    }},'Add Module'));
+    m.appendChild(saveBtn('Add Module', function(){
+      if(!_adminFormVals.title||!_aSelC){alert('Title required');return Promise.resolve();}
+      var row={id:genId(),course_id:_aSelC.id,title:_adminFormVals.title,order_index:(_aSelC.modules||[]).length+1};
+      return sbPost('modules',row,S.token).then(function(){return reloadCourses();}).then(function(){
+        for(var i=0;i<S.courses.length;i++){if(S.courses[i].id===_aSelC.id){_aSelC=S.courses[i];break;}}
+        closeModal();
+      });
+    }));
   }
   else if(_aModal==='editModule'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Edit Module'));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Edit Module'));
     m.appendChild(fi('Module Title *','title','Module title'));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title){alert('Title required');return;}
-      await sbPatch('modules','?id=eq.'+_adminFormVals.id,{title:_adminFormVals.title},S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
-      closeModal();
-    }},'Save Changes'));
+    m.appendChild(saveBtn('Save Changes', function(){
+      if(!_adminFormVals.title){alert('Title required');return Promise.resolve();}
+      return sbPatch('modules','?id=eq.'+_adminFormVals.id,{title:_adminFormVals.title},S.token)
+        .then(function(){return reloadCourses();}).then(function(){
+          for(var i=0;i<S.courses.length;i++){if(S.courses[i].id===(_aSelC&&_aSelC.id)){_aSelC=S.courses[i];break;}}
+          closeModal();
+        });
+    }));
   }
   else if(_aModal==='addLesson'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Lesson'));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Add Lesson'));
     m.appendChild(fi('Lesson Title *','title','e.g. The 50/30/20 Rule'));
     m.appendChild(fs('Type *','type',[['text','📄 Text'],['video','🎬 Video'],['link','🔗 Link/Resource'],['quiz','❓ Quiz']]));
     m.appendChild(fi('XP Reward','xp','10','number'));
-    const ca=div(null);
+    var caWrap=div(null);
     function updateCA(){
-      ca.innerHTML='';
-      const t=_adminFormVals.type||'text';
-      if(t==='text') ca.appendChild(fta('Content (use \n for new lines)','content','Lesson text...'));
-      else if(t==='video') ca.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
-      else if(t==='link') ca.appendChild(fi('Resource URL','content','https://...'));
+      caWrap.innerHTML='';
+      var t=_adminFormVals.type||'text';
+      if(t==='text') caWrap.appendChild(fta('Content','content','Lesson text...'));
+      else if(t==='video') caWrap.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
+      else if(t==='link') caWrap.appendChild(fi('Resource URL','content','https://...'));
     }
     updateCA();
-    const ts=m.querySelector('select');
-    if(ts) ts.addEventListener('change',()=>{_adminFormVals.type=ts.value;updateCA();});
-    m.appendChild(ca);
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title||!_aSelM){alert('Title required');return;}
-      const row={id:genId(),module_id:_aSelM.id,title:_adminFormVals.title,lesson_type:_adminFormVals.type||'text',content:_adminFormVals.content||'',xp_reward:Number(_adminFormVals.xp)||10,order_index:(_aSelM.lessons||[]).length+1};
-      const saveBtnEl2=m.querySelector('.btn-p');
-      if(saveBtnEl2){saveBtnEl2.textContent='Saving...';saveBtnEl2.disabled=true;}
-      await sbPost('lessons',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC.id)||_aSelC;
-      _aSelM=(_aSelC.modules||[]).find(mod=>mod.id===_aSelM.id)||_aSelM;
-      closeModal();
-    }},'Add Lesson'));
+    // Watch for type changes
+    var typeSelEl=m.querySelector('select');
+    if(typeSelEl) typeSelEl.addEventListener('change',function(){_adminFormVals.type=typeSelEl.value;updateCA();});
+    m.appendChild(caWrap);
+    m.appendChild(saveBtn('Add Lesson', function(){
+      if(!_adminFormVals.title||!_aSelM){alert('Title required');return Promise.resolve();}
+      var row={id:genId(),module_id:_aSelM.id,title:_adminFormVals.title,
+        lesson_type:_adminFormVals.type||'text',content:_adminFormVals.content||'',
+        xp_reward:Number(_adminFormVals.xp)||10,order_index:(_aSelM.lessons||[]).length+1};
+      return sbPost('lessons',row,S.token).then(function(){return reloadCourses();}).then(function(){
+        for(var i=0;i<S.courses.length;i++){
+          if(S.courses[i].id===(_aSelC&&_aSelC.id)){_aSelC=S.courses[i];break;}
+        }
+        for(var j=0;j<(_aSelC&&_aSelC.modules||[]).length;j++){
+          if(_aSelC.modules[j].id===(_aSelM&&_aSelM.id)){_aSelM=_aSelC.modules[j];break;}
+        }
+        closeModal();
+      });
+    }));
   }
   else if(_aModal==='editLesson'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Edit Lesson'));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Edit Lesson'));
     m.appendChild(fi('Lesson Title *','title','Lesson title'));
     m.appendChild(fs('Type','type',[['text','📄 Text'],['video','🎬 Video'],['link','🔗 Link/Resource'],['quiz','❓ Quiz']]));
-    m.appendChild(fi('XP Reward','xp','10','number'));
-    const ca2=div(null);
+    m.appendChild(fi('XP Reward','xp','','number'));
+    var ca2Wrap=div(null);
     function updateCA2(){
-      ca2.innerHTML='';
-      const t=_adminFormVals.type||'text';
-      if(t==='text') ca2.appendChild(fta('Content','content','Lesson text...'));
-      else if(t==='video') ca2.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
-      else if(t==='link') ca2.appendChild(fi('Resource URL','content','https://...'));
+      ca2Wrap.innerHTML='';
+      var t2=_adminFormVals.type||'text';
+      if(t2==='text') ca2Wrap.appendChild(fta('Content','content','Lesson text...'));
+      else if(t2==='video') ca2Wrap.appendChild(fi('YouTube Embed URL','content','https://www.youtube.com/embed/VIDEO_ID'));
+      else if(t2==='link') ca2Wrap.appendChild(fi('Resource URL','content','https://...'));
     }
     updateCA2();
-    const ts2=m.querySelector('select');
-    if(ts2) ts2.addEventListener('change',()=>{_adminFormVals.type=ts2.value;updateCA2();});
-    m.appendChild(ca2);
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.title){alert('Title required');return;}
-      await sbPatch('lessons','?id=eq.'+_adminFormVals.id,{
-        title:_adminFormVals.title,
-        lesson_type:_adminFormVals.type||'text',
-        xp_reward:Number(_adminFormVals.xp)||10,
-        content:_adminFormVals.content||'',
-      },S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
-      _aSelM=(_aSelC && _aSelC.modules||[]).find(mod=>mod.id===_aSelM && _aSelM.id)||_aSelM;
-      closeModal();
-    }},'Save Changes'));
+    var typeSelEl2=m.querySelector('select');
+    if(typeSelEl2) typeSelEl2.addEventListener('change',function(){_adminFormVals.type=typeSelEl2.value;updateCA2();});
+    m.appendChild(ca2Wrap);
+    m.appendChild(saveBtn('Save Changes', function(){
+      if(!_adminFormVals.title){alert('Title required');return Promise.resolve();}
+      return sbPatch('lessons','?id=eq.'+_adminFormVals.id,{
+        title:_adminFormVals.title,lesson_type:_adminFormVals.type||'text',
+        xp_reward:Number(_adminFormVals.xp)||10,content:_adminFormVals.content||''
+      },S.token).then(function(){return reloadCourses();}).then(function(){
+        for(var i=0;i<S.courses.length;i++){
+          if(S.courses[i].id===(_aSelC&&_aSelC.id)){_aSelC=S.courses[i];break;}
+        }
+        for(var j=0;j<(_aSelC&&_aSelC.modules||[]).length;j++){
+          if(_aSelC.modules[j].id===(_aSelM&&_aSelM.id)){_aSelM=_aSelC.modules[j];break;}
+        }
+        closeModal();
+      });
+    }));
   }
   else if(_aModal==='addQuestion'){
-    m.appendChild(h('h3',{style:{marginBottom:16}},'Add Quiz Question'));
-    const ta2=h('textarea',{placeholder:'Type your question here...',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:80,resize:'vertical',outline:'none',marginBottom:14}});
-    ta2.addEventListener('input',()=>_adminFormVals.text=ta2.value);
-    m.appendChild(div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7}},'Question *'),ta2));
-    ['A','B','C','D'].forEach(l=>m.appendChild(fi('Option '+l,'opt'+l,'Answer choice '+l)));
+    m.appendChild(h('h3',{style:{marginBottom:16,fontSize:18}},'Add Quiz Question'));
+    m.appendChild(fta('Question *','text','Type your question here...'));
+    m.appendChild(fi('Option A *','optA','Answer choice A'));
+    m.appendChild(fi('Option B *','optB','Answer choice B'));
+    m.appendChild(fi('Option C *','optC','Answer choice C'));
+    m.appendChild(fi('Option D *','optD','Answer choice D'));
     m.appendChild(fs('Correct Answer *','correct',[['A','A — First option'],['B','B — Second option'],['C','C — Third option'],['D','D — Fourth option']]));
-    const ta3=h('textarea',{placeholder:'Why is this the correct answer?',style:{padding:'14px 16px',border:'2px solid var(--border)',borderRadius:10,fontSize:14,fontFamily:'inherit',width:'100%',minHeight:70,resize:'vertical',outline:'none',marginBottom:14}});
-    ta3.addEventListener('input',()=>_adminFormVals.exp=ta3.value);
-    m.appendChild(div(null,h('label',{style:{display:'block',fontSize:13,fontWeight:700,marginBottom:7}},'Explanation'),ta3));
-    m.appendChild(btn({class:'btn btn-p','click':async()=>{
-      if(!_adminFormVals.text||!_adminFormVals.optA||!_adminFormVals.optB||!_adminFormVals.optC||!_adminFormVals.optD){alert('Please fill in the question and all 4 options.');return;}
-      const row={id:genId(),lesson_id:_aSelL.id,question_text:_adminFormVals.text,option_a:_adminFormVals.optA,option_b:_adminFormVals.optB,option_c:_adminFormVals.optC,option_d:_adminFormVals.optD,correct_answer:_adminFormVals.correct||'A',explanation:_adminFormVals.exp||'',order_index:(_aSelL.questions||[]).length+1};
-      await sbPost('questions',row,S.token);
-      await reloadCourses();
-      _aSelC=S.courses.find(c=>c.id===_aSelC && _aSelC.id)||_aSelC;
-      _aSelM=(_aSelC && _aSelC.modules||[]).find(mod=>mod.id===_aSelM && _aSelM.id)||_aSelM;
-      _aSelL=(_aSelM && _aSelM.lessons||[]).find(l=>l.id===_aSelL && _aSelL.id)||_aSelL;
-      closeModal();
-    }},'Add Question'));
+    m.appendChild(fta('Explanation','exp','Why is this the correct answer?'));
+    m.appendChild(saveBtn('Add Question', function(){
+      if(!_adminFormVals.text||!_adminFormVals.optA||!_adminFormVals.optB||!_adminFormVals.optC||!_adminFormVals.optD){
+        alert('Please fill in the question and all 4 options.');return Promise.resolve();
+      }
+      var row={id:genId(),lesson_id:_aSelL.id,question_text:_adminFormVals.text,
+        option_a:_adminFormVals.optA,option_b:_adminFormVals.optB,
+        option_c:_adminFormVals.optC,option_d:_adminFormVals.optD,
+        correct_answer:_adminFormVals.correct||'A',explanation:_adminFormVals.exp||'',
+        order_index:(_aSelL.questions||[]).length+1};
+      return sbPost('questions',row,S.token).then(function(){return reloadCourses();}).then(function(){
+        for(var i=0;i<S.courses.length;i++){
+          if(S.courses[i].id===(_aSelC&&_aSelC.id)){_aSelC=S.courses[i];break;}
+        }
+        for(var j=0;j<(_aSelC&&_aSelC.modules||[]).length;j++){
+          if(_aSelC.modules[j].id===(_aSelM&&_aSelM.id)){_aSelM=_aSelC.modules[j];break;}
+        }
+        for(var k=0;k<(_aSelM&&_aSelM.lessons||[]).length;k++){
+          if(_aSelM.lessons[k].id===(_aSelL&&_aSelL.id)){_aSelL=_aSelM.lessons[k];break;}
+        }
+        closeModal();
+      });
+    }));
   }
 
-  m.appendChild(btn({class:'btn btn-g',style:{marginTop:6},'click':closeModal},'Cancel'));
-  const overlay=div({class:'modal-bg','click':closeModal});
+  m.appendChild(btn({class:'btn btn-g',style:{marginTop:4},'click':closeModal},'Cancel'));
+  var overlay=div({class:'modal-bg'});
+  overlay.addEventListener('click', closeModal);
   overlay.appendChild(m);
-  m.addEventListener('click',e=>e.stopPropagation());
+  m.addEventListener('click', function(e){e.stopPropagation();});
   return overlay;
 }
 
-async function reloadCourses() {
-  try {
-    const courses = await loadCourses(S.token, !S.user.isAdmin);
-    S.courses = courses;
-    console.log('Courses reloaded:', courses.length);
-  } catch(e) {
-    console.error('reloadCourses failed:', e);
-  }
-}
 
 function renderAdmin() {
   const tabs=[['courses','📚 Courses'],['content','📝 Content'],['stats','📊 Stats']];
