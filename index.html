@@ -298,8 +298,10 @@ const S = {
       localStorage.setItem('pw_u',JSON.stringify(this.user));
       // Sync to Supabase by email (most reliable)
       if(this.user.email&&this.token){
+        var _xpH = authH(this.token);
+        _xpH['Prefer'] = 'return=minimal';
         fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
-          {method:'PATCH',headers:(function(){var _h={}; var _src=H; for(var _k in _src)_h[_k]=_src[_k]; _h['Prefer']='return=minimal'; return _h;})(),body:JSON.stringify({xp_total:realXP})});
+          {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:realXP})});
       }
       // Check if any course is now fully complete
       this.checkCourseCompletion(id);
@@ -743,11 +745,11 @@ function HomeTab(allLessons,doneLessons,totalXP,level,lxp) {
       ),
       div({style:{marginTop:14,background:'rgba(255,255,255,.12)',borderRadius:11,padding:'11px 13px'}},
         div({style:{display:'flex',justifyContent:'space-between',marginBottom:5}},
-          span({style:{color:'#fff',fontSize:12,fontWeight:600}},'Level '+level),
-          span({style:{color:'rgba(255,255,255,.6)',fontSize:11}},lxp+'/100 XP to next')
+          span({style:{color:'#fff',fontSize:12,fontWeight:600}},'Level '+level+' · '+totalXP+' XP'),
+          span({style:{color:'rgba(255,255,255,.6)',fontSize:11}},lxp+'/100 XP to level '+(level+1))
         ),
-        div({style:{height:5,background:'rgba(255,255,255,.2)',borderRadius:99}},
-          div({style:{height:5,background:'var(--amber)',borderRadius:99,width:lxp+'%'}})
+        div({style:{height:7,background:'rgba(255,255,255,.2)',borderRadius:99}},
+          div({style:{height:7,background:'linear-gradient(90deg,var(--amber),#F97316)',borderRadius:99,width:lxp+'%',transition:'width .5s ease'}})
         )
       )
     ),
@@ -795,6 +797,18 @@ function LeaderboardTab() {
   const container = div({class:'screen'});
 
   async function load() {
+    // Sync local XP to Supabase before loading leaderboard
+    if(S.user && S.user.email && S.token) {
+      var currentXP = S.totalXP();
+      if(currentXP !== S.user.xp_total) {
+        S.user.xp_total = currentXP;
+        localStorage.setItem('pw_u', JSON.stringify(S.user));
+        var _lbXpH = authH(S.token);
+        _lbXpH['Prefer'] = 'return=minimal';
+        await fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(S.user.email),
+          {method:'PATCH', headers:_lbXpH, body:JSON.stringify({xp_total:currentXP})});
+      }
+    }
     container.innerHTML = '';
     container.appendChild(div({style:{padding:'20px',textAlign:'center'}}, div({class:'spin spin-d',style:{width:28,height:28}})));
 
