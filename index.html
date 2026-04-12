@@ -646,13 +646,15 @@ async function showMainApp() {
     }
   }
   // Always sync progress-based XP to Supabase on load
-  const progressXP = S.totalXP;
-  if(S.user) {
+  var progressXP = S.totalXP();
+  if(S.user && progressXP > 0) {
     S.user.xp_total = progressXP;
     localStorage.setItem('pw_u', JSON.stringify(S.user));
     if(S.user.email && S.token) {
+      var xpHeaders = authH(S.token);
+      xpHeaders['Prefer'] = 'return=minimal';
       fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(S.user.email),
-        {method:'PATCH',headers:(function(){var _h={}; var _src=H; for(var _k in _src)_h[_k]=_src[_k]; _h['Prefer']='return=minimal'; return _h;})(),body:JSON.stringify({xp_total:progressXP})});
+        {method:'PATCH', headers:xpHeaders, body:JSON.stringify({xp_total:progressXP})});
     }
   }
   renderApp();
