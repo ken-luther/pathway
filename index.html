@@ -293,15 +293,16 @@ const S = {
     this.progress[id]=true;
     localStorage.setItem('pw_p', JSON.stringify(this.progress));
     if(this.user){
-      const realXP = this.totalXP(); // recalculate from progress
-      this.user.xp_total = realXP;
-      localStorage.setItem('pw_u',JSON.stringify(this.user));
-      // Sync to Supabase by email (most reliable)
-      if(this.user.email&&this.token){
-        var _xpH = authH(this.token);
-        _xpH['Prefer'] = 'return=minimal';
-        fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
-          {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:realXP})});
+      var realXP = this.totalXP(); // recalculate from progress
+      if(realXP >= (this.user.xp_total||0)) {
+        this.user.xp_total = realXP;
+        localStorage.setItem('pw_u',JSON.stringify(this.user));
+        if(this.user.email&&this.token){
+          var _xpH = authH(this.token);
+          _xpH['Prefer'] = 'return=minimal';
+          fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
+            {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:realXP})});
+        }
       }
       // Check if any course is now fully complete
       this.checkCourseCompletion(id);
@@ -647,12 +648,16 @@ async function showMainApp() {
       localStorage.setItem('pw_badges', JSON.stringify(br.data));
     }
   }
-  // Always sync progress-based XP to Supabase on load
+  // Sync XP: only update Supabase if local progress gives MORE XP than stored
+  // This prevents new-device or lesson-ID-change from wiping out earned XP
   var progressXP = S.totalXP();
-  if(S.user && progressXP > 0) {
-    S.user.xp_total = progressXP;
+  var storedXP = (S.user && S.user.xp_total) ? S.user.xp_total : 0;
+  var finalXP = Math.max(progressXP, storedXP);
+  if(S.user) {
+    S.user.xp_total = finalXP;
     localStorage.setItem('pw_u', JSON.stringify(S.user));
-    if(S.user.email && S.token) {
+    // Only push to Supabase if we have MORE XP than what's stored there
+    if(progressXP > storedXP && S.user.email && S.token) {
       var xpHeaders = authH(S.token);
       xpHeaders['Prefer'] = 'return=minimal';
       fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(S.user.email),
@@ -797,10 +802,11 @@ function LeaderboardTab() {
   const container = div({class:'screen'});
 
   async function load() {
-    // Sync local XP to Supabase before loading leaderboard
+    // Sync XP before leaderboard - only push if local progress > stored
     if(S.user && S.user.email && S.token) {
       var currentXP = S.totalXP();
-      if(currentXP !== S.user.xp_total) {
+      var knownXP = S.user.xp_total || 0;
+      if(currentXP > knownXP) {
         S.user.xp_total = currentXP;
         localStorage.setItem('pw_u', JSON.stringify(S.user));
         var _lbXpH = authH(S.token);
