@@ -295,16 +295,17 @@ const S = {
     this.progress[id]=true;
     localStorage.setItem('pw_p', JSON.stringify(this.progress));
     if(this.user){
-      var realXP = this.totalXP(); // recalculate from progress
-      if(realXP >= (this.user.xp_total||0)) {
-        this.user.xp_total = realXP;
-        localStorage.setItem('pw_u',JSON.stringify(this.user));
-        if(this.user.email&&this.token){
-          var _xpH = authH(this.token);
-          _xpH['Prefer'] = 'return=minimal';
-          fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
-            {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:realXP})});
-        }
+      // Add earned XP to known total — avoids recalculation bugs from lesson ID changes
+      var currentStored = this.user.xp_total||0;
+      var fromProgress = this.totalXP();
+      var newTotal = Math.max(fromProgress, currentStored + (xp||0));
+      this.user.xp_total = newTotal;
+      localStorage.setItem('pw_u',JSON.stringify(this.user));
+      if(this.user.email&&this.token){
+        var _xpH = authH(this.token);
+        _xpH['Prefer'] = 'return=minimal';
+        fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
+          {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:newTotal})});
       }
       // Check if any course is now fully complete
       this.checkCourseCompletion(id);
@@ -641,7 +642,7 @@ let _quiz={cur:0,sel:null,answered:false,score:0,done:false};
 
 async function showMainApp() {
   // Load courses from Supabase
-  const courses=await loadCourses(S.token, !S.user && S.user.isAdmin);
+  const courses=await loadCourses(S.token, !(S.user && S.user.isAdmin));
   S.courses=courses;
   // Load resource categories and resources
   try {
@@ -699,7 +700,7 @@ function renderApp() {
   if(_selLesson){renderLesson();return;}
   if(_selCourse&&S.tab==='learn'){renderCourseDetail();return;}
 
-  const totalXP=S.totalXP(), level=Math.floor(totalXP/100)+1, lxp=totalXP%100;
+  const totalXP=Math.max(S.totalXP(),(S.user&&S.user.xp_total)||0), level=Math.floor(totalXP/100)+1, lxp=totalXP%100;
   const allLessons=S.courses.flatMap(c=>c.modules.flatMap(m=>m.lessons));
   const doneLessons=allLessons.filter(l=>S.isDone(l.id)).length;
 
