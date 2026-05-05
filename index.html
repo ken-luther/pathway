@@ -286,6 +286,8 @@ const S = {
     try { this.user = JSON.parse(localStorage.getItem('pw_u')||'null'); } catch(e){}
     try { this.progress = JSON.parse(localStorage.getItem('pw_p')||'{}'); } catch(e){}
     this.token = localStorage.getItem('pw_t')||null;
+    this.resourceCats = [];
+    this.resources = [];
   },
   saveUser: function(u) { this.user=u; localStorage.setItem('pw_u', JSON.stringify(u)); },
   saveToken: function(t) { this.token=t; if(t) localStorage.setItem('pw_t',t); else localStorage.removeItem('pw_t'); },
@@ -634,13 +636,20 @@ function showSplash() {
 }
 
 // -- MAIN APP ------------------------------------------------------------------
-let _showAdmin=false, _editProfile=false, _selCourse=null, _selLesson=null, _selMod=null;
+let _showAdmin=false, _editProfile=false, _selCourse=null, _selLesson=null, _selMod=null, _selResCat=null;
 let _quiz={cur:0,sel:null,answered:false,score:0,done:false};
 
 async function showMainApp() {
   // Load courses from Supabase
   const courses=await loadCourses(S.token, !S.user && S.user.isAdmin);
   S.courses=courses;
+  // Load resource categories and resources
+  try {
+    var rcData = await sbGet('resource_categories', '?order=order_index.asc', S.token);
+    S.resourceCats = (rcData && rcData.ok && Array.isArray(rcData.data)) ? rcData.data : [];
+    var rsData = await sbGet('resources', '?order=order_index.asc', S.token);
+    S.resources = (rsData && rsData.ok && Array.isArray(rsData.data)) ? rsData.data : [];
+  } catch(e) { S.resourceCats=[]; S.resources=[]; }
   // Sync badges from Supabase into localStorage
   if(S.user && S.user.id && !String(S.user.id).startsWith('local_')) {
     const br = await sbGet('user_badges','?user_id=eq.'+S.user.id,S.token||undefined);
@@ -706,11 +715,12 @@ function renderApp() {
   if(S.tab==='home') content=HomeTab(allLessons,doneLessons,totalXP,level,lxp);
   else if(S.tab==='learn') content=LearnTab();
   else if(S.tab==='board') content=LeaderboardTab();
+  else if(S.tab==='resources') content=ResourcesTab();
   else content=ProfileTab(allLessons,doneLessons,totalXP,level);
 
   const nav=div({class:'bnav'},
-    ...[['home','🏠','Home'],['learn','📚','Learn'],['board','🏆','Leaderboard'],['profile','👤','Profile']].map(([t,ic,lb])=>
-      btn({class:'ni'+(S.tab===t?' act':''),style:{border:'none'},'click':()=>{S.tab=t;_selCourse=null;renderApp();}},
+    ...[['home','🏠','Home'],['learn','📚','Learn'],['resources','🗺️','Pathways'],['board','🏆','Board'],['profile','👤','Profile']].map(([t,ic,lb])=>
+      btn({class:'ni'+(S.tab===t?' act':''),style:{border:'none'},'click':()=>{S.tab=t;_selCourse=null;_selResCat=null;renderApp();}},
         span({},ic),span({},lb))
     )
   );
@@ -1081,6 +1091,91 @@ function openCreateClassModal(onDone) {
   m.appendChild(btn({class:'btn btn-g','click':()=>overlay.remove()},'Cancel'));
   overlay.appendChild(m);
   document.getElementById('app').appendChild(overlay);
+}
+
+function ResourcesTab() {
+  var wrap = div({style:{flex:1,overflowY:'auto',background:'#f7f8fa',minHeight:0}});
+
+  if(_selResCat) {
+    // --- RESOURCE DETAIL VIEW ---
+    var cat = S.resourceCats.find(function(c){return c.id===_selResCat;});
+    if(!cat) { _selResCat=null; return ResourcesTab(); }
+    var items = S.resources.filter(function(r){return r.category_id===_selResCat;});
+
+    var header = div({style:{background:cat.color||'#1E4976',padding:'18px 16px 14px',color:'#fff'}},
+      div({style:{display:'flex',alignItems:'center',gap:8,marginBottom:4}},
+        span({style:{fontSize:22,cursor:'pointer'},'click':function(){_selResCat=null;renderApp();}}, '←'),
+        span({style:{fontSize:26}}, cat.emoji||'📌'),
+        span({style:{fontSize:20,fontWeight:700}}, cat.title)
+      ),
+      cat.description ? p({style:{margin:0,fontSize:13,opacity:0.88}}, cat.description) : null
+    );
+
+    var itemsWrap = div({style:{padding:'14px 14px 80px'}});
+    if(items.length===0) {
+      itemsWrap.appendChild(div({style:{textAlign:'center',color:'#888',padding:'40px 0',fontSize:14}}, 'No resources yet.'));
+    }
+    items.forEach(function(r) {
+      var card = div({style:{background:'#fff',borderRadius:12,marginBottom:14,overflow:'hidden',boxShadow:'0 1px 6px rgba(0,0,0,0.07)'}});
+      if(r.image_url) {
+        var img = document.createElement('img');
+        img.src = r.image_url;
+        img.style.cssText = 'width:100%;height:170px;object-fit:cover;display:block;';
+        card.appendChild(img);
+      }
+      var body = div({style:{padding:'13px 14px 14px'}});
+      body.appendChild(div({style:{fontWeight:700,fontSize:16,marginBottom:6,color:'#1a1a2e'}}, r.title));
+      if(r.body) {
+        var bodyEl = div({style:{fontSize:14,color:'#444',lineHeight:'1.55',marginBottom:r.link_url?10:0,whiteSpace:'pre-wrap'}});
+        bodyEl.textContent = r.body;
+        body.appendChild(bodyEl);
+      }
+      if(r.link_url) {
+        var linkBtn = div({
+          style:{display:'inline-block',background:'#1E4976',color:'#fff',padding:'9px 18px',borderRadius:8,fontSize:14,fontWeight:600,cursor:'pointer',marginTop:4},
+          click:function(){window.open(r.link_url,'_blank');}
+        }, r.link_label||'Learn More');
+        body.appendChild(linkBtn);
+      }
+      card.appendChild(body);
+      itemsWrap.appendChild(card);
+    });
+
+    wrap.appendChild(header);
+    wrap.appendChild(itemsWrap);
+  } else {
+    // --- CATEGORY LIST VIEW ---
+    var topBar = div({style:{background:'#1E4976',padding:'18px 16px 16px',color:'#fff'}},
+      div({style:{fontSize:22,fontWeight:700,marginBottom:4}}, '🗺️ Pathways'),
+      div({style:{fontSize:13,opacity:0.85}}, 'Resources and support for foster youth')
+    );
+    wrap.appendChild(topBar);
+
+    var grid = div({style:{padding:'14px 14px 80px'}});
+    if(S.resourceCats.length===0) {
+      grid.appendChild(div({style:{textAlign:'center',color:'#888',padding:'60px 0 20px',fontSize:14}}, 'No resources added yet.'));
+    }
+    S.resourceCats.forEach(function(cat) {
+      var count = S.resources.filter(function(r){return r.category_id===cat.id;}).length;
+      var catId = cat.id;
+      var card = div({
+        style:{background:'#fff',borderRadius:14,marginBottom:13,padding:'16px',display:'flex',alignItems:'center',gap:14,boxShadow:'0 1px 6px rgba(0,0,0,0.07)',cursor:'pointer'},
+        click:function(){_selResCat=catId;renderApp();}
+      },
+        div({style:{width:52,height:52,borderRadius:12,background:cat.color||'#1E4976',display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,flexShrink:0}}, cat.emoji||'📌'),
+        div({style:{flex:1,minWidth:0}},
+          div({style:{fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:3}}, cat.title),
+          cat.description ? div({style:{fontSize:13,color:'#666',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, cat.description) : null,
+          div({style:{fontSize:12,color:'#888'}}, count+' resource'+(count===1?'':'s'))
+        ),
+        span({style:{color:'#aaa',fontSize:20}}, '›')
+      );
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
+  }
+
+  return wrap;
 }
 
 function ProfileTab(allLessons,doneLessons,totalXP,level) {
@@ -1865,7 +1960,7 @@ async function reloadCourses() {
 }
 
 function renderAdmin() {
-  const tabs=[['courses','📚 Courses'],['content','📝 Content'],['stats','📊 Stats']];
+  const tabs=[['courses','📚 Courses'],['content','📝 Content'],['resources','🗺️ Pathways'],['stats','📊 Stats']];
 
   const hdr=div({style:{background:'var(--navy)',padding:'38px 18px 13px',flexShrink:0}},
     div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},
@@ -1885,6 +1980,7 @@ function renderAdmin() {
   let content;
   if(_aTab==='courses') content=AdminCourses();
   else if(_aTab==='content') content=AdminContent();
+  else if(_aTab==='resources') content=AdminResources();
   else { content=div({style:{padding:'13px',minHeight:'200px'}}); setTimeout(()=>AdminStats(content),0); }
 
   const wrapper=div({style:{display:'flex',flexDirection:'column',height:'100%',background:'var(--off)'}},hdr,div({class:'screen',style:{flex:1}},content));
@@ -2147,7 +2243,383 @@ function AdminContent() {
 }
 
 
-async function AdminStats(container) {
+function AdminResources() {
+  var wrap = div({style:{padding:'14px',paddingBottom:'80px'}});
+  var _openCatId = null;
+
+  function reload() {
+    Promise.all([
+      sbGet('resource_categories', '?order=order_index.asc', S.token),
+      sbGet('resources', '?order=order_index.asc', S.token)
+    ]).then(function(results) {
+      S.resourceCats = (results[0] && results[0].ok && Array.isArray(results[0].data)) ? results[0].data : [];
+      S.resources = (results[1] && results[1].ok && Array.isArray(results[1].data)) ? results[1].data : [];
+      render();
+    }).catch(function(e) {
+      console.error('Pathways reload error:', e);
+    });
+  }
+
+  function closeOverlay(id) {
+    var ov = document.getElementById(id);
+    if(ov && ov.parentNode) ov.parentNode.removeChild(ov);
+  }
+
+  function mkInp(placeholder, val, type) {
+    var i = document.createElement('input');
+    i.type = type||'text';
+    i.placeholder = placeholder||'';
+    i.value = val!=null ? val : '';
+    i.style.cssText = 'width:100%;box-sizing:border-box;border:1.5px solid #ddd;border-radius:8px;padding:10px 12px;font-size:15px;margin-bottom:3px;font-family:inherit;-webkit-appearance:none;display:block;';
+    return i;
+  }
+
+  function mkTa(placeholder, val) {
+    var t = document.createElement('textarea');
+    t.placeholder = placeholder||'';
+    t.value = val||'';
+    t.rows = 3;
+    t.style.cssText = 'width:100%;box-sizing:border-box;border:1.5px solid #ddd;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:3px;resize:vertical;font-family:inherit;-webkit-appearance:none;display:block;';
+    return t;
+  }
+
+  function mkLbl(text) {
+    var l = document.createElement('div');
+    l.style.cssText = 'font-size:12px;font-weight:700;color:#555;margin-top:10px;margin-bottom:3px;';
+    l.textContent = text;
+    return l;
+  }
+
+  function mkOverlay(ovId) {
+    var ov = document.createElement('div');
+    ov.id = ovId;
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:99999;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 14px 60px;';
+    return ov;
+  }
+
+  function mkModal() {
+    var m = document.createElement('div');
+    m.style.cssText = 'background:#fff;border-radius:16px;padding:18px;max-width:440px;margin:0 auto;';
+    m.addEventListener('click', function(e){ e.stopPropagation(); });
+    return m;
+  }
+
+  function mkBtnRow(onCancel, onSave, saveLabel) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;margin-top:16px;';
+    var c = document.createElement('button');
+    c.textContent = 'Cancel';
+    c.style.cssText = 'flex:1;padding:12px;border:2px solid #ddd;border-radius:8px;background:#fff;font-size:15px;cursor:pointer;font-family:inherit;';
+    c.addEventListener('click', onCancel);
+    var s = document.createElement('button');
+    s.textContent = saveLabel||'Save';
+    s.style.cssText = 'flex:1;padding:12px;border:none;border-radius:8px;background:#1E4976;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+    s.addEventListener('click', onSave);
+    row.appendChild(c);
+    row.appendChild(s);
+    return {row:row, saveBtn:s};
+  }
+
+  function openCatModal(cat) {
+    var ovId = 'rcat-overlay';
+    closeOverlay(ovId);
+
+    var ov = document.createElement('div');
+    ov.id = ovId;
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,.6);';
+    var scroll = document.createElement('div');
+    scroll.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 14px 60px;';
+
+    var m = document.createElement('div');
+    m.style.cssText = 'background:#fff;border-radius:16px;padding:18px 16px;max-width:440px;margin:0 auto;';
+    m.addEventListener('click', function(e){ e.stopPropagation(); });
+
+    function al(txt) {
+      var l = document.createElement('div');
+      l.style.cssText = 'font-size:12px;font-weight:700;color:#444;margin-top:12px;margin-bottom:4px;';
+      l.textContent = txt;
+      m.appendChild(l);
+    }
+    function ai(placeholder, val) {
+      var i = document.createElement('input');
+      i.type = 'text';
+      i.placeholder = placeholder||'';
+      i.value = val||'';
+      i.style.cssText = 'width:100%;box-sizing:border-box;border:2px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none;display:block;';
+      m.appendChild(i);
+      return i;
+    }
+
+    var hd = document.createElement('div');
+    hd.style.cssText = 'font-weight:700;font-size:18px;color:#1a1a2e;margin-bottom:4px;';
+    hd.textContent = (cat ? 'Edit' : 'New') + ' Category';
+    m.appendChild(hd);
+
+    al('Emoji');
+    var iEmoji = ai('📌', cat ? (cat.emoji||'📌') : '📌');
+
+    al('Title *');
+    var iTitle = ai('e.g. Housing, Transportation, Legal Help', cat ? cat.title : '');
+
+    al('Description');
+    var iDesc = ai('Short description shown on the card', cat ? (cat.description||'') : '');
+
+    al('🔗 Link URL (optional)');
+    var iLink = ai('https://... a link for this whole category', cat ? (cat.link_url||'') : '');
+
+    al('Color (hex)');
+    var iColor = ai('#1E4976', cat ? (cat.color||'#1E4976') : '#1E4976');
+
+    al('Order (0 = first)');
+    var iOrder = ai('0', cat ? String(cat.order_index||0) : String(S.resourceCats.length));
+
+    var statusEl = document.createElement('div');
+    statusEl.style.cssText = 'font-size:13px;color:#e74c3c;min-height:18px;margin-top:10px;word-break:break-word;';
+    m.appendChild(statusEl);
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;margin-top:14px;';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'flex:1;padding:13px;border:2px solid #ddd;border-radius:10px;background:#fff;font-size:15px;cursor:pointer;font-family:inherit;';
+    cancelBtn.addEventListener('click', function(){ closeOverlay(ovId); });
+
+    var saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save Category';
+    saveBtn.style.cssText = 'flex:2;padding:13px;border:none;border-radius:10px;background:#1E4976;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+    saveBtn.addEventListener('click', function() {
+      var t = iTitle.value.trim();
+      if(!t){ statusEl.textContent='Title is required.'; return; }
+      statusEl.textContent='Saving...';
+      statusEl.style.color='#888';
+      saveBtn.textContent='Saving...'; saveBtn.disabled=true;
+      var data = {
+        emoji: iEmoji.value||'📌',
+        title: t,
+        description: iDesc.value||'',
+        link_url: iLink.value.trim()||null,
+        color: iColor.value||'#1E4976',
+        order_index: parseInt(iOrder.value)||0
+      };
+      var p = cat
+        ? sbPatch('resource_categories','?id=eq.'+cat.id, data, S.token)
+        : sbPost('resource_categories', data, S.token);
+      p.then(function(r){
+        console.log('saveCategory response:', r.status, JSON.stringify(r.data));
+        if(!r.ok){
+          statusEl.textContent='Save failed ('+r.status+'): '+(r.data&&r.data.message ? r.data.message : 'Check Supabase RLS policies or run create_resources_tables.sql');
+          statusEl.style.color='#e74c3c';
+          saveBtn.textContent='Save Category'; saveBtn.disabled=false; return;
+        }
+        closeOverlay(ovId); reload();
+      }).catch(function(e){
+        statusEl.textContent='Network error: '+e.message;
+        statusEl.style.color='#e74c3c';
+        saveBtn.textContent='Save Category'; saveBtn.disabled=false;
+      });
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    m.appendChild(btnRow);
+    scroll.appendChild(m);
+    ov.appendChild(scroll);
+    ov.addEventListener('click', function(){ closeOverlay(ovId); });
+    document.body.appendChild(ov);
+    setTimeout(function(){ iTitle.focus(); }, 80);
+  }
+
+  function openResourceModal(resource, catId) {
+    var ovId = 'rres-overlay';
+    closeOverlay(ovId);
+
+    // Full screen overlay with scroll
+    var ov = document.createElement('div');
+    ov.id = ovId;
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,.6);';
+
+    // Inner scroll container
+    var scroll = document.createElement('div');
+    scroll.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 14px 60px;';
+
+    var m = document.createElement('div');
+    m.style.cssText = 'background:#fff;border-radius:16px;padding:18px 16px;max-width:440px;margin:0 auto;';
+    m.addEventListener('click', function(e){ e.stopPropagation(); });
+
+    function addLbl(txt) {
+      var l = document.createElement('div');
+      l.style.cssText = 'font-size:12px;font-weight:700;color:#444;margin-top:12px;margin-bottom:4px;';
+      l.textContent = txt;
+      m.appendChild(l);
+    }
+    function addInp(placeholder, val) {
+      var i = document.createElement('input');
+      i.type = 'text';
+      i.placeholder = placeholder||'';
+      i.value = val||'';
+      i.style.cssText = 'width:100%;box-sizing:border-box;border:2px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none;display:block;';
+      m.appendChild(i);
+      return i;
+    }
+    function addTa(placeholder, val) {
+      var t = document.createElement('textarea');
+      t.placeholder = placeholder||'';
+      t.value = val||'';
+      t.rows = 3;
+      t.style.cssText = 'width:100%;box-sizing:border-box;border:2px solid #e5e7eb;border-radius:8px;padding:11px 12px;font-size:14px;font-family:inherit;-webkit-appearance:none;outline:none;display:block;resize:vertical;';
+      m.appendChild(t);
+      return t;
+    }
+
+    var titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-weight:700;font-size:18px;color:#1a1a2e;margin-bottom:4px;';
+    titleEl.textContent = (resource ? 'Edit' : 'New') + ' Resource';
+    m.appendChild(titleEl);
+
+    addLbl('Title *');
+    var iTitle = addInp('e.g. THP Housing Program', resource ? resource.title : '');
+
+    addLbl('Description');
+    var iBody = addTa('What is this resource? Who is it for?', resource ? (resource.body||'') : '');
+
+    addLbl('🔗 Link URL');
+    var iLink = addInp('https://website.com', resource ? (resource.link_url||'') : '');
+
+    addLbl('Link Button Text');
+    var iLinkLabel = addInp('e.g. Apply Now, Learn More', resource ? (resource.link_label||'Learn More') : 'Learn More');
+
+    addLbl('Image URL (optional)');
+    var iImage = addInp('https://... paste a direct image link', resource ? (resource.image_url||'') : '');
+
+    addLbl('Order (0 = show first)');
+    var iOrderEl = document.createElement('input');
+    iOrderEl.type = 'number';
+    iOrderEl.value = resource ? String(resource.order_index||0) : String(S.resources.filter(function(r){return r.category_id===catId;}).length);
+    iOrderEl.style.cssText = 'width:80px;border:2px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-size:15px;font-family:inherit;-webkit-appearance:none;outline:none;display:block;';
+    m.appendChild(iOrderEl);
+
+    var statusEl = document.createElement('div');
+    statusEl.style.cssText = 'font-size:13px;color:#e74c3c;min-height:18px;margin-top:10px;';
+    m.appendChild(statusEl);
+
+    var btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;margin-top:14px;';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'flex:1;padding:13px;border:2px solid #ddd;border-radius:10px;background:#fff;font-size:15px;cursor:pointer;font-family:inherit;';
+    cancelBtn.addEventListener('click', function(){ closeOverlay(ovId); });
+
+    var saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save Resource';
+    saveBtn.style.cssText = 'flex:2;padding:13px;border:none;border-radius:10px;background:#1E4976;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;';
+    saveBtn.addEventListener('click', function() {
+      var t = iTitle.value.trim();
+      if(!t){ statusEl.textContent='Title is required.'; return; }
+      statusEl.textContent='';
+      saveBtn.textContent='Saving...';
+      saveBtn.disabled=true;
+      var data = {
+        category_id: resource ? resource.category_id : catId,
+        title: t,
+        body: iBody.value||'',
+        link_url: iLink.value.trim(),
+        link_label: iLinkLabel.value.trim()||'Learn More',
+        image_url: iImage.value.trim(),
+        order_index: parseInt(iOrderEl.value)||0
+      };
+      var p = resource
+        ? sbPatch('resources','?id=eq.'+resource.id, data, S.token)
+        : sbPost('resources', data, S.token);
+      p.then(function(r){
+        if(!r.ok){
+          statusEl.textContent='Save failed ('+r.status+'). Make sure create_resources_tables.sql has been run in Supabase.';
+          saveBtn.textContent='Save Resource'; saveBtn.disabled=false; return;
+        }
+        closeOverlay(ovId); reload();
+      }).catch(function(e){
+        statusEl.textContent='Error: '+e.message;
+        saveBtn.textContent='Save Resource'; saveBtn.disabled=false;
+      });
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    m.appendChild(btnRow);
+    scroll.appendChild(m);
+    ov.appendChild(scroll);
+    ov.addEventListener('click', function(){ closeOverlay(ovId); });
+    document.body.appendChild(ov);
+    setTimeout(function(){ iTitle.focus(); }, 80);
+  }
+
+  function render() {
+    while(wrap.firstChild) wrap.removeChild(wrap.firstChild);
+
+    var topRow = div({style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}});
+    topRow.appendChild(div({style:{fontWeight:700,fontSize:17,color:'#1a1a2e'}}, '🗺️ Pathway Categories'));
+    topRow.appendChild(btn({class:'btn',style:{width:'auto',padding:'7px 14px',fontSize:13},'click':function(){openCatModal(null);}}, '+ Category'));
+    wrap.appendChild(topRow);
+
+    if(S.resourceCats.length===0) {
+      wrap.appendChild(div({style:{color:'#888',fontSize:14,padding:'20px 0',lineHeight:1.6}},
+        'No categories yet.',
+        div({style:{marginTop:8,fontSize:12,color:'#aaa'}},'Note: Run create_resources_tables.sql in Supabase if you have not already.')
+      ));
+    }
+
+    S.resourceCats.forEach(function(cat) {
+      var catItems = S.resources.filter(function(r){return r.category_id===cat.id;});
+      var isOpen = _openCatId === cat.id;
+
+      var catRow = div({
+        style:{background:'#fff',borderRadius:isOpen?'12px 12px 0 0':12,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.07)',marginBottom:isOpen?0:10,border:'1.5px solid '+(isOpen?'#1E4976':'transparent')},
+        click:function(){_openCatId = isOpen ? null : cat.id; render();}
+      },
+        div({style:{width:38,height:38,borderRadius:9,background:cat.color||'#1E4976',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}, cat.emoji||'📌'),
+        div({style:{flex:1,minWidth:0}},
+          div({style:{fontWeight:700,fontSize:15,color:'#1a1a2e'}}, cat.title),
+          div({style:{fontSize:12,color:'#888'}}, catItems.length+' resource'+(catItems.length===1?'':'s'))
+        ),
+        btn({class:'btn-icon',style:{marginRight:2},'click':function(e){e.stopPropagation();openCatModal(cat);}}, '✏️'),
+        btn({class:'btn-icon',style:{color:'#e74c3c'},'click':function(e){e.stopPropagation();if(confirm('Delete this category and all its resources?')){sbDelete('resource_categories','?id=eq.'+cat.id,S.token).then(function(){reload();});}}}, '🗑️'),
+        span({style:{color:'#aaa',fontSize:16,marginLeft:2}}, isOpen?'▲':'▼')
+      );
+      wrap.appendChild(catRow);
+
+      if(isOpen) {
+        var body = div({style:{background:'#f9f9f9',borderRadius:'0 0 12px 12px',border:'1.5px solid #1E4976',borderTop:'none',padding:'10px 12px 12px',marginBottom:10}});
+        body.appendChild(btn({class:'btn',style:{width:'100%',marginBottom:catItems.length?10:0,padding:'8px',fontSize:13},'click':function(){openResourceModal(null, cat.id);}}, '+ Add Resource'));
+
+        catItems.forEach(function(r) {
+          var rCard = div({style:{background:'#fff',borderRadius:10,padding:'10px 12px',marginBottom:7,display:'flex',alignItems:'flex-start',gap:8,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}});
+          var rInfo = div({style:{flex:1,minWidth:0}});
+          rInfo.appendChild(div({style:{fontWeight:600,fontSize:13,color:'#1a1a2e',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.title));
+          if(r.body) {
+            var prev = div({style:{fontSize:12,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}});
+            prev.textContent = r.body.substring(0,60)+(r.body.length>60?'...':'');
+            rInfo.appendChild(prev);
+          }
+          if(r.link_url) rInfo.appendChild(div({style:{fontSize:11,color:'#1E4976',marginTop:2}}, '🔗 '+r.link_url.replace(/^https?:\/\//,'').substring(0,40)));
+          rCard.appendChild(rInfo);
+          var acts = div({style:{display:'flex',gap:5,flexShrink:0}});
+          acts.appendChild(btn({class:'btn-icon','click':function(){openResourceModal(r, cat.id);}}, '✏️'));
+          acts.appendChild(btn({class:'btn-icon',style:{color:'#e74c3c'},'click':function(){if(confirm('Delete this resource?')){sbDelete('resources','?id=eq.'+r.id,S.token).then(function(){reload();});}}}, '🗑️'));
+          rCard.appendChild(acts);
+          body.appendChild(rCard);
+        });
+        wrap.appendChild(body);
+      }
+    });
+  }
+
+  render();
+  setTimeout(reload, 0);
+  return wrap;
+}
+
+function AdminStats(container) {
   if(!container) container=div({style:{padding:'13px'}});
 
   // Survey registry - add future surveys here
