@@ -288,6 +288,7 @@ const S = {
     this.token = localStorage.getItem('pw_t')||null;
     this.resourceCats = [];
     this.resources = [];
+    this.courses = [];
   },
   saveUser: function(u) { this.user=u; localStorage.setItem('pw_u', JSON.stringify(u)); },
   saveToken: function(t) { this.token=t; if(t) localStorage.setItem('pw_t',t); else localStorage.removeItem('pw_t'); },
@@ -306,6 +307,14 @@ const S = {
         _xpH['Prefer'] = 'return=minimal';
         fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(this.user.email),
           {method:'PATCH', headers:_xpH, body:JSON.stringify({xp_total:newTotal})});
+      }
+      // Sync lesson completion to Supabase so progress persists across devices
+      if(this.user.id && this.token) {
+        var _ph = authH(this.token);
+        _ph['Content-Type'] = 'application/json';
+        _ph['Prefer'] = 'resolution=ignore-duplicates,return=minimal';
+        fetch(SB_URL+'/rest/v1/user_lesson_progress',
+          {method:'POST', headers:_ph, body:JSON.stringify({user_id:this.user.id, lesson_id:id})});
       }
       // Check if any course is now fully complete
       this.checkCourseCompletion(id);
@@ -651,6 +660,20 @@ async function showMainApp() {
     var rsData = await sbGet('resources', '?order=order_index.asc', S.token);
     S.resources = (rsData && rsData.ok && Array.isArray(rsData.data)) ? rsData.data : [];
   } catch(e) { S.resourceCats=[]; S.resources=[]; }
+  // Load completed lessons from Supabase and merge into local progress
+  // This restores checkmarks after reseeds, new devices, or cleared cache
+  if(S.user && S.user.id && S.token) {
+    try {
+      var progData = await sbGet('user_lesson_progress',
+        '?user_id=eq.'+S.user.id+'&select=lesson_id', S.token);
+      if(progData && progData.ok && Array.isArray(progData.data)) {
+        progData.data.forEach(function(row) {
+          if(row.lesson_id) S.progress[row.lesson_id] = true;
+        });
+        localStorage.setItem('pw_p', JSON.stringify(S.progress));
+      }
+    } catch(e) { /* progress table may not exist yet */ }
+  }
   // Sync badges from Supabase into localStorage
   if(S.user && S.user.id && !String(S.user.id).startsWith('local_')) {
     const br = await sbGet('user_badges','?user_id=eq.'+S.user.id,S.token||undefined);
@@ -2029,7 +2052,7 @@ function renderModal(){
 
 async function reloadCourses() {
   try {
-    const courses = await loadCourses(S.token, !S.user.isAdmin);
+    const courses = await loadCourses(S.token, !(S.user && S.user.isAdmin));
     S.courses = courses;
   } catch(e) {
     console.error('reloadCourses error:', e);
