@@ -1095,47 +1095,79 @@ function openCreateClassModal(onDone) {
 }
 
 function ResourcesTab() {
-  var wrap = div({style:{flex:1,overflowY:'auto',background:'#f7f8fa',minHeight:0}});
+  var wrap = div({style:{flex:1,overflowY:'auto',background:'#f0f2f8',minHeight:0}});
 
   if(_selResCat) {
     // --- RESOURCE DETAIL VIEW ---
     var cat = S.resourceCats.find(function(c){return c.id===_selResCat;});
     if(!cat) { _selResCat=null; return ResourcesTab(); }
     var items = S.resources.filter(function(r){return r.category_id===_selResCat;});
+    var catColor = cat.color||'#1E4976';
 
-    var header = div({style:{background:cat.color||'#1E4976',padding:'18px 16px 14px',color:'#fff'}},
-      div({style:{display:'flex',alignItems:'center',gap:8,marginBottom:4}},
-        span({style:{fontSize:22,cursor:'pointer'},'click':function(){_selResCat=null;renderApp();}}, '←'),
-        span({style:{fontSize:26}}, cat.emoji||'📌'),
-        span({style:{fontSize:20,fontWeight:700}}, cat.title)
-      ),
-      cat.description ? p({style:{margin:0,fontSize:13,opacity:0.88}}, cat.description) : null
+    // Hero header with gradient
+    var header = div({style:{
+      background:'linear-gradient(160deg,'+catColor+' 0%,'+catColor+'cc 100%)',
+      padding:'44px 18px 28px',color:'#fff',position:'relative',overflow:'hidden'
+    }},
+      div({style:{position:'absolute',top:-30,right:-30,width:140,height:140,borderRadius:'50%',background:'rgba(255,255,255,0.07)'}}),
+      div({style:{position:'absolute',bottom:-40,left:-20,width:100,height:100,borderRadius:'50%',background:'rgba(255,255,255,0.05)'}}),
+      div({style:{position:'relative',zIndex:1}},
+        div({style:{display:'flex',alignItems:'center',gap:10,marginBottom:10}},
+          span({style:{fontSize:15,cursor:'pointer',opacity:0.8,fontWeight:600,letterSpacing:'0.02em'},'click':function(){_selResCat=null;renderApp();}}, '← Back'),
+          div({style:{flex:1}}),
+          div({style:{width:44,height:44,borderRadius:12,background:'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}, cat.emoji||'📌')
+        ),
+        div({style:{fontSize:26,fontWeight:800,letterSpacing:'-0.02em',lineHeight:1.2,fontFamily:"'DM Serif Display',serif"}}, cat.title),
+        cat.description ? div({style:{marginTop:7,fontSize:14,opacity:0.82,lineHeight:1.5}}, cat.description) : null,
+        div({style:{marginTop:10,display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,0.15)',borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600}},
+          span({}, items.length+' resource'+(items.length===1?'':'s'))
+        )
+      )
     );
 
-    var itemsWrap = div({style:{padding:'14px 14px 80px'}});
+    var itemsWrap = div({style:{padding:'16px 14px 90px'}});
     if(items.length===0) {
-      itemsWrap.appendChild(div({style:{textAlign:'center',color:'#888',padding:'40px 0',fontSize:14}}, 'No resources yet.'));
+      itemsWrap.appendChild(div({style:{textAlign:'center',padding:'60px 20px'}},
+        div({style:{fontSize:48,marginBottom:12}},'🔍'),
+        div({style:{fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:6}},'No resources yet'),
+        div({style:{fontSize:14,color:'#888',lineHeight:1.5}},'Check back soon — resources will be added here.')
+      ));
     }
     items.forEach(function(r) {
-      var card = div({style:{background:'#fff',borderRadius:12,marginBottom:14,overflow:'hidden',boxShadow:'0 1px 6px rgba(0,0,0,0.07)'}});
+      var card = div({style:{background:'#fff',borderRadius:16,marginBottom:16,overflow:'hidden',boxShadow:'0 2px 12px rgba(0,0,0,0.08)',border:'1px solid rgba(0,0,0,0.04)'}});
       if(r.image_url) {
+        var imgWrap = div({style:{position:'relative',overflow:'hidden'}});
         var img = document.createElement('img');
         img.src = r.image_url;
-        img.style.cssText = 'width:100%;height:170px;object-fit:cover;display:block;';
-        card.appendChild(img);
+        img.style.cssText = 'width:100%;height:185px;object-fit:cover;display:block;';
+        imgWrap.appendChild(img);
+        card.appendChild(imgWrap);
       }
-      var body = div({style:{padding:'13px 14px 14px'}});
-      body.appendChild(div({style:{fontWeight:700,fontSize:16,marginBottom:6,color:'#1a1a2e'}}, r.title));
+      var body = div({style:{padding:'16px 16px 18px'}});
+      // Title
+      body.appendChild(div({style:{fontWeight:800,fontSize:17,marginBottom:7,color:'#0f172a',letterSpacing:'-0.01em',lineHeight:1.3}}, r.title));
+      // Body text
       if(r.body) {
-        var bodyEl = div({style:{fontSize:14,color:'#444',lineHeight:'1.55',marginBottom:r.link_url?10:0,whiteSpace:'pre-wrap'}});
+        var bodyEl = div({style:{fontSize:14,color:'#475569',lineHeight:'1.65',marginBottom:r.link_url?14:0}});
         bodyEl.textContent = r.body;
         body.appendChild(bodyEl);
       }
+      // Link button
       if(r.link_url) {
         var linkBtn = div({
-          style:{display:'inline-block',background:'#1E4976',color:'#fff',padding:'9px 18px',borderRadius:8,fontSize:14,fontWeight:600,cursor:'pointer',marginTop:4},
+          style:{
+            display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+            background:'linear-gradient(135deg,'+catColor+','+catColor+'dd)',
+            color:'#fff',padding:'12px 20px',borderRadius:10,
+            fontSize:14,fontWeight:700,cursor:'pointer',
+            boxShadow:'0 2px 8px rgba(0,0,0,0.15)',
+            letterSpacing:'0.01em'
+          },
           click:function(){window.open(r.link_url,'_blank');}
-        }, r.link_label||'Learn More');
+        },
+          span({}, r.link_label||'Learn More'),
+          span({style:{fontSize:16}}, '→')
+        );
         body.appendChild(linkBtn);
       }
       card.appendChild(body);
@@ -1144,32 +1176,76 @@ function ResourcesTab() {
 
     wrap.appendChild(header);
     wrap.appendChild(itemsWrap);
+
   } else {
     // --- CATEGORY LIST VIEW ---
-    var topBar = div({style:{background:'#1E4976',padding:'18px 16px 16px',color:'#fff'}},
-      div({style:{fontSize:22,fontWeight:700,marginBottom:4}}, '🗺️ Pathways'),
-      div({style:{fontSize:13,opacity:0.85}}, 'Resources and support for foster youth')
-    );
-    wrap.appendChild(topBar);
 
-    var grid = div({style:{padding:'14px 14px 80px'}});
+    // Hero banner
+    var hero = div({style:{
+      background:'linear-gradient(160deg,#0f2461 0%,#1E4976 60%,#1a6b8a 100%)',
+      padding:'48px 20px 32px',color:'#fff',position:'relative',overflow:'hidden'
+    }},
+      div({style:{position:'absolute',top:-50,right:-40,width:200,height:200,borderRadius:'50%',background:'rgba(255,255,255,0.06)'}}),
+      div({style:{position:'absolute',bottom:-60,left:-30,width:160,height:160,borderRadius:'50%',background:'rgba(255,255,255,0.04)'}}),
+      div({style:{position:'relative',zIndex:1}},
+        div({style:{fontSize:13,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',opacity:0.65,marginBottom:8}},'THE PATHWAY PROJECT'),
+        div({style:{fontSize:28,fontWeight:800,letterSpacing:'-0.02em',lineHeight:1.2,fontFamily:"'DM Serif Display',serif",marginBottom:8}},
+          '🗺️ Pathways'
+        ),
+        div({style:{fontSize:14,opacity:0.8,lineHeight:1.55,maxWidth:300}},'Resources and support built for foster youth')
+      )
+    );
+    wrap.appendChild(hero);
+
+    // Category count pill
+    var countBar = div({style:{padding:'14px 16px 4px',display:'flex',alignItems:'center',justifyContent:'space-between'}},
+      div({style:{fontSize:13,fontWeight:700,color:'#64748b',letterSpacing:'0.05em',textTransform:'uppercase'}},'Categories'),
+      div({style:{fontSize:12,color:'#94a3b8'}}, S.resourceCats.length+' total')
+    );
+    wrap.appendChild(countBar);
+
+    var grid = div({style:{padding:'4px 14px 90px'}});
     if(S.resourceCats.length===0) {
-      grid.appendChild(div({style:{textAlign:'center',color:'#888',padding:'60px 0 20px',fontSize:14}}, 'No resources added yet.'));
+      grid.appendChild(div({style:{textAlign:'center',padding:'60px 20px'}},
+        div({style:{fontSize:52,marginBottom:12}},'🗺️'),
+        div({style:{fontWeight:700,fontSize:17,color:'#1a1a2e',marginBottom:6}},'No pathways yet'),
+        div({style:{fontSize:14,color:'#888',lineHeight:1.5}},'Your admin can add categories and resources here.')
+      ));
     }
+
     S.resourceCats.forEach(function(cat) {
       var count = S.resources.filter(function(r){return r.category_id===cat.id;}).length;
       var catId = cat.id;
+      var catColor = cat.color||'#1E4976';
+
       var card = div({
-        style:{background:'#fff',borderRadius:14,marginBottom:13,padding:'16px',display:'flex',alignItems:'center',gap:14,boxShadow:'0 1px 6px rgba(0,0,0,0.07)',cursor:'pointer'},
+        style:{
+          background:'#fff',borderRadius:16,marginBottom:12,
+          overflow:'hidden',cursor:'pointer',
+          boxShadow:'0 2px 10px rgba(0,0,0,0.07)',
+          border:'1px solid rgba(0,0,0,0.04)',
+          display:'flex',alignItems:'stretch'
+        },
         click:function(){_selResCat=catId;renderApp();}
       },
-        div({style:{width:52,height:52,borderRadius:12,background:cat.color||'#1E4976',display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,flexShrink:0}}, cat.emoji||'📌'),
-        div({style:{flex:1,minWidth:0}},
-          div({style:{fontWeight:700,fontSize:16,color:'#1a1a2e',marginBottom:3}}, cat.title),
-          cat.description ? div({style:{fontSize:13,color:'#666',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, cat.description) : null,
-          div({style:{fontSize:12,color:'#888'}}, count+' resource'+(count===1?'':'s'))
+        // Color accent bar on left
+        div({style:{width:5,background:'linear-gradient(180deg,'+catColor+','+catColor+'99)',flexShrink:0}}),
+        // Icon
+        div({style:{
+          width:64,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',
+          background:'linear-gradient(135deg,'+catColor+'18,'+catColor+'08)',
+          fontSize:28
+        }}, cat.emoji||'📌'),
+        // Content
+        div({style:{flex:1,padding:'14px 12px',minWidth:0}},
+          div({style:{fontWeight:800,fontSize:16,color:'#0f172a',marginBottom:3,letterSpacing:'-0.01em'}}, cat.title),
+          cat.description ? div({style:{fontSize:13,color:'#64748b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:4,lineHeight:1.4}}, cat.description) : null,
+          div({style:{display:'inline-flex',alignItems:'center',gap:4,background:catColor+'18',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:700,color:catColor}},
+            span({}, count+' resource'+(count===1?'':'s'))
+          )
         ),
-        span({style:{color:'#aaa',fontSize:20}}, '›')
+        // Arrow
+        div({style:{display:'flex',alignItems:'center',paddingRight:14,color:'#cbd5e1',fontSize:18,fontWeight:300}}, '›')
       );
       grid.appendChild(card);
     });
