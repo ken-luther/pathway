@@ -880,13 +880,13 @@ submitB.innerHTML=’<div class="spin"></div>’;
 submitB.disabled=true;
 const e=_form.email.trim().toLowerCase();
 // Always try Supabase for fresh data and token
-const res=await sbSignIn(e,*form.password);
+const res=await Promise.race([sbSignIn(e,*form.password),new Promise(function(r){setTimeout(function(){r({ok:false,data:{},error:‘timeout’});},10000);})]) ;
 if(res.ok&&res.data.access_token){
 S.saveToken(res.data.access_token);
 if(res.data.refresh_token) localStorage.setItem(‘pw_rt’, res.data.refresh_token);
 const u={id:res.data.user.id,email:e,name:(res.data.user.user_metadata&&res.data.user.user_metadata.name)||’’||(e||’’).split(’@’)[0],xp_total:0,isAdmin:e===ADMIN};
 // Load full profile from Supabase — always by email for consistency
-const pr=await sbGet(‘profiles’,’?email=eq.’+encodeURIComponent(e),res.data.access_token);
+const pr=await Promise.race([sbGet(‘profiles’,’?email=eq.’+encodeURIComponent(e),res.data.access_token),new Promise(function(r){setTimeout(function(){r({ok:false,data:[]});},6000);})]) ;
 const prof = pr.ok&&Array.isArray(pr.data)&&pr.data[0] ? pr.data[0] : null;
 console.log(‘LOGIN profile found:’, !!prof, prof ? ‘grade=’+prof.grade+’ job=’+prof.job_interest+’ emoji=’+prof.profile_emoji : ‘NONE’);
 if(prof){
@@ -909,7 +909,7 @@ await sbPost(‘profiles’,newP,res.data.access_token);
 }
 // Load badges into localStorage so profile tab matches leaderboard
 if(u.id && !String(u.id).startsWith(’local*’)) {
-const br = await sbGet(‘user_badges’,’?user_id=eq.’+u.id+’&order=earned_at.desc’,res.data.access_token);
+const br = await Promise.race([sbGet(‘user_badges’,’?user_id=eq.’+u.id+’&order=earned_at.desc’,res.data.access_token),new Promise(function(r){setTimeout(function(){r({ok:false,data:[]});},5000);})]) ;
 if(br.ok && Array.isArray(br.data)) {
 localStorage.setItem(‘pw_badges’, JSON.stringify(br.data));
 }
@@ -1208,59 +1208,108 @@ let _showAdmin=false, _editProfile=false, _selCourse=null, _selLesson=null, _sel
 let _quiz={cur:0,sel:null,answered:false,score:0,done:false};
 
 async function showMainApp() {
-// Load courses from Supabase
-const courses=await loadCourses(S.token, !(S.user && S.user.isAdmin));
-S.courses=courses;
-// Load resource categories and resources
-try {
-var rcData = await sbGet(‘resource_categories’, ‘?order=order_index.asc’, S.token);
-S.resourceCats = (rcData && rcData.ok && Array.isArray(rcData.data)) ? rcData.data : [];
-var rsData = await sbGet(‘resources’, ‘?order=order_index.asc’, S.token);
-S.resources = (rsData && rsData.ok && Array.isArray(rsData.data)) ? rsData.data : [];
-} catch(e) { S.resourceCats=[]; S.resources=[]; }
-// Load completed lessons from Supabase and merge into local progress
-// This restores checkmarks after reseeds, new devices, or cleared cache
-if(S.user && S.user.id && S.token) {
-try {
-var progData = await sbGet(‘user_lesson_progress’,
-‘?user_id=eq.’+S.user.id+’&select=lesson_id’, S.token);
-if(progData && progData.ok && Array.isArray(progData.data)) {
-progData.data.forEach(function(row) {
-if(row.lesson_id) S.progress[row.lesson_id] = true;
-});
-localStorage.setItem(‘pw_p’, JSON.stringify(S.progress));
-}
-} catch(e) { /* progress table may not exist yet */ }
-}
-// Sync badges from Supabase into localStorage
-if(S.user && S.user.id && !String(S.user.id).startsWith(‘local_’)) {
-const br = await sbGet(‘user_badges’,’?user_id=eq.’+S.user.id,S.token||undefined);
-if(br.ok && Array.isArray(br.data)) {
-localStorage.setItem(‘pw_badges’, JSON.stringify(br.data));
-}
-}
-// Sync XP: only update Supabase if local progress gives MORE XP than stored
-// This prevents new-device or lesson-ID-change from wiping out earned XP
-var progressXP = S.totalXP();
-var storedXP = (S.user && S.user.xp_total) ? S.user.xp_total : 0;
-var finalXP = Math.max(progressXP, storedXP);
-if(S.user) {
-S.user.xp_total = finalXP;
-localStorage.setItem(‘pw_u’, JSON.stringify(S.user));
-// Only push to Supabase if we have MORE XP than what’s stored there
-if(progressXP > storedXP && S.user.email && S.token) {
-var xpHeaders = authH(S.token);
-xpHeaders[‘Prefer’] = ‘return=minimal’;
-fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),
-{method:‘PATCH’, headers:xpHeaders, body:JSON.stringify({xp_total:progressXP})});
-}
-}
-// Force mentor selection if not yet chosen
+// ── Show app immediately from cache so it never hangs ──────────────
+// Render with whatever we have in localStorage right now
+S.courses = S.courses && S.courses.length ? S.courses : [];
+if(!S.resourceCats) S.resourceCats = [];
+if(!S.resources) S.resources = [];
+
+// Force mentor selection if not yet chosen (check before first render)
 if(S.user && (!S.user.mentor_id || S.user.mentor_id===’’)) {
 showMentorPicker();
+// Still kick off background sync so data is ready when they finish picking
+_bgSync();
 return;
 }
+
+// Render immediately with cached data
 renderApp();
+
+// ── Background sync - fetch fresh data without blocking UI ─────────
+_bgSync();
+}
+
+function _bgSync() {
+// Timeout wrapper for any fetch - if it takes > 8s, give up silently
+function withTimeout(promise, ms) {
+return Promise.race([
+promise,
+new Promise(function(res){ setTimeout(function(){ res(null); }, ms); })
+]);
+}
+
+var token = S.token;
+var user = S.user;
+
+// Fetch all data in parallel
+Promise.all([
+withTimeout(loadCourses(token, !(user && user.isAdmin)), 8000),
+withTimeout(sbGet(‘resource_categories’,’?order=order_index.asc’,token), 8000),
+withTimeout(sbGet(‘resources’,’?order=order_index.asc’,token), 8000),
+withTimeout(
+(user && user.id && token)
+? sbGet(‘user_lesson_progress’,’?user_id=eq.’+user.id+’&select=lesson_id’,token)
+: Promise.resolve(null),
+8000
+),
+withTimeout(
+(user && user.id && !String(user.id).startsWith(‘local_’))
+? sbGet(‘user_badges’,’?user_id=eq.’+user.id,token||undefined)
+: Promise.resolve(null),
+8000
+)
+]).then(function(results) {
+var courses   = results[0];
+var rcData    = results[1];
+var rsData    = results[2];
+var progData  = results[3];
+var badgeData = results[4];
+
+```
+// Update courses
+if(courses && courses.length) {
+  S.courses = courses;
+}
+
+// Update resources
+if(rcData && rcData.ok && Array.isArray(rcData.data)) S.resourceCats = rcData.data;
+if(rsData && rsData.ok && Array.isArray(rsData.data)) S.resources = rsData.data;
+
+// Restore lesson progress
+if(progData && progData.ok && Array.isArray(progData.data)) {
+  progData.data.forEach(function(row){
+    if(row.lesson_id) S.progress[row.lesson_id] = true;
+  });
+  localStorage.setItem('pw_p', JSON.stringify(S.progress));
+}
+
+// Sync badges
+if(badgeData && badgeData.ok && Array.isArray(badgeData.data)) {
+  localStorage.setItem('pw_badges', JSON.stringify(badgeData.data));
+}
+
+// Sync XP
+if(S.user) {
+  var progressXP = S.totalXP();
+  var storedXP = S.user.xp_total || 0;
+  var finalXP = Math.max(progressXP, storedXP);
+  S.user.xp_total = finalXP;
+  localStorage.setItem('pw_u', JSON.stringify(S.user));
+  if(progressXP > storedXP && S.user.email && S.token) {
+    var xpH = authH(S.token);
+    xpH['Prefer'] = 'return=minimal';
+    fetch(SB_URL+'/rest/v1/profiles?email=eq.'+encodeURIComponent(S.user.email),
+      {method:'PATCH', headers:xpH, body:JSON.stringify({xp_total:progressXP})});
+  }
+}
+
+// Re-render with fresh data if still on main app
+if(S.user && !_selLesson) renderApp();
+```
+
+}).catch(function(e){
+console.warn(‘Background sync error:’, e);
+});
 }
 
 function showMentorPicker() {
@@ -3703,6 +3752,12 @@ _form.email = S.user.email;
 }
 showSplash();
 }
+
+// Global error handler - show message instead of infinite spinner
+window.onerror = function(msg, src, line) {
+var app = document.getElementById(‘app’);
+if(app) app.innerHTML = ‘<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:#0D2461;color:#fff;padding:32px;text-align:center;"><div style="font-size:48px;margin-bottom:16px">⚠️</div><p style="font-size:16px;font-weight:700;margin-bottom:8px">Something went wrong</p><p style="font-size:13px;opacity:.7;margin-bottom:24px">’ + msg + ‘</p><button onclick="location.reload()" style="background:#1A56DB;color:#fff;border:none;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Try Again</button></div>’;
+};
 
 if (document.readyState === ‘loading’) {
 document.addEventListener(‘DOMContentLoaded’, _start);
