@@ -219,14 +219,15 @@ to   { opacity: 1; transform: translateY(0); }
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <noscript><div style="color:#fff;text-align:center;padding:40px;font-family:sans-serif;">Please enable JavaScript to use Pathway.</div></noscript>
 <script>
+
 window.onerror = function(msg, src, line, col, err) {
-  document.getElementById('app').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;background:#0D2461;padding:20px;text-align:center;font-family:sans-serif;"><div style=\'font-size:40px\'>⚠️</div><p style=\'color:#fff;font-size:16px;font-weight:700\'>Error loading app</p><p style=\'color:rgba(255,255,255,.7);font-size:13px\'>' + msg + ' (line ' + line + ')</p><button onclick=\'localStorage.clear();location.reload()\' style=\'margin-top:12px;padding:12px 24px;background:#1A56DB;color:#fff;border:none;border-radius:10px;font-size:15px;font-family:sans-serif;cursor:pointer\'>Clear & Retry</button></div>';
-  return false;
+document.getElementById(‘app’).innerHTML = ‘<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;background:#0D2461;padding:20px;text-align:center;font-family:sans-serif;"><div style='font-size:40px'>⚠️</div><p style='color:#fff;font-size:16px;font-weight:700'>Error loading app</p><p style='color:rgba(255,255,255,.7);font-size:13px'>’ + msg + ’ (line ’ + line + ‘)</p><button onclick='localStorage.clear();location.reload()' style='margin-top:12px;padding:12px 24px;background:#1A56DB;color:#fff;border:none;border-radius:10px;font-size:15px;font-family:sans-serif;cursor:pointer'>Clear & Retry</button></div>’;
+return false;
 };
-const ADMIN = 'ken.luther@icloud.com';
-const SB_URL = 'https://hsunvbdysmvrlgjxuoot.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzdW52YmR5c212cmxnanh1b290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAxODYsImV4cCI6MjA5MDE5NjE4Nn0.b_z-OQN5ZP3wSWpJFrXZf80gI_1f0JF1s0HciY9aRMA';
-const H = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+const ADMIN = ‘ken.luther@icloud.com’;
+const SB_URL = ‘https://hsunvbdysmvrlgjxuoot.supabase.co’;
+const SB_KEY = ‘eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzdW52YmR5c212cmxnanh1b290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAxODYsImV4cCI6MjA5MDE5NjE4Nn0.b_z-OQN5ZP3wSWpJFrXZf80gI_1f0JF1s0HciY9aRMA’;
+const H = {‘Content-Type’:‘application/json’,‘apikey’:SB_KEY,‘Authorization’:’Bearer ’+SB_KEY};
 
 // – SUPABASE —————————————————————–
 async function api(path, opts) {
@@ -566,7 +567,7 @@ submitB.innerHTML=’<div class="spin"></div>’;
 submitB.disabled=true;
 const e=_form.email.trim().toLowerCase();
 // Always try Supabase for fresh data and token
-const res=await Promise.race([sbSignIn(e,*form.password),new Promise(function(r){setTimeout(function(){r({ok:false,data:{},error:‘timeout’});},10000);})]);
+const res=await Promise.race([sbSignIn(e,*form.password),new Promise(function(r){setTimeout(function(){r({ok:false,data:{},error:‘timeout’});},10000);})]) ;
 if(res.ok&&res.data.access_token){
 S.saveToken(res.data.access_token);
 if(res.data.refresh_token) localStorage.setItem(‘pw_rt’, res.data.refresh_token);
@@ -649,7 +650,7 @@ const qEls=pqs.map(q=>{
 const nextB=btn({class:'btn btn-p',disabled:!pok,'click':async()=>{
   if(_sPage<total-1){_sPage++;go('survey');return;}
   go('mentor');
-}},_sPage<total-1?'Next →':'Choose Your Mentor →');
+}},_sPage<total-1?'Next →':'Choose Mentor →');
 
 return div({style:{paddingBottom:40}},
   div({style:{background:'var(--navy)',padding:'42px 22px 18px',color:'#fff'}},
@@ -671,12 +672,11 @@ async function finishSignup() {
 const e=_form.email.trim().toLowerCase();
 const name=_form.name;
 const password=_form.password;
-const sv=Object.assign({},*survey);
-// Show loading
+const sv={…*survey};
 mount(div({style:{display:‘flex’,flexDirection:‘column’,alignItems:‘center’,justifyContent:‘center’,height:‘100%’,background:‘var(–navy)’}},
 div({style:{fontSize:48,marginBottom:16}},‘🚀’),
 div({style:{color:’#fff’,fontSize:16,fontWeight:700,marginBottom:12}},‘Setting up your account…’),
-h(‘div’,{class:‘spin’,style:{borderColor:‘rgba(255,255,255,.3)’,borderTopColor:’#fff’,width:‘32px’,height:‘32px’}})
+h(‘div’,{style:{width:‘28px’,height:‘28px’,border:‘3px solid rgba(255,255,255,.3)’,borderTopColor:’#fff’,borderRadius:‘50%’,animation:‘sp .7s linear infinite’}})
 ));
 const res=await Promise.race([sbSignUp(e,password),new Promise(function(r){setTimeout(function(){r({ok:false,data:{}});},15000);})]);
 if(res.ok&&res.data.user){
@@ -708,105 +708,127 @@ employment_status:sv.employment||null,
 };
 console.log(‘Saving profile with survey:’, JSON.stringify(row));
 const pr=await sbPost(‘profiles’,row,token);
-if(pr.ok){
-S.saveUser(Object.assign({},S.user,{id:res.data.user.id,name:name,mentor_id:sv.mentor_id||null}));
+if(pr.ok) S.saveUser(Object.assign({},S.user,{id:res.data.user.id,name:name}));
 }
-}
-// Now show main app
-S.saveUser({id:(res.data&&res.data.user?res.data.user.id:’local*’+Date.now()),email:e,name:name,xp_total:0,isAdmin:e===ADMIN,onboarding_complete:true,mentor_id:sv.mentor_id||null,profile_emoji:‘😊’});
+var uid=res.data&&res.data.user?res.data.user.id:’local*’+Date.now();
+S.saveUser({id:uid,email:e,name:name,xp_total:0,isAdmin:e===ADMIN,onboarding_complete:true,mentor_id:sv.mentor_id||null,profile_emoji:‘😊’});
 showMainApp();
 }
 
 function MentorStep() {
 var selected = _survey.mentor_id || null;
-var wrap = div({style:{padding:‘24px 20px 40px’,overflowY:‘auto’}});
+var wrap = div({style:{padding:‘24px 20px 40px’,overflowY:‘auto’,minHeight:‘100%’}});
 var hd = document.createElement(‘div’);
-hd.style.cssText = ‘text-align:center;margin-bottom:24px;’;
-hd.innerHTML = ‘<div style="font-size:32px;margin-bottom:8px">🎓</div><h2 style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:6px">Choose your mentor</h2><p style="font-size:14px;color:var(--muted)">They guide you through every lesson.</p>’;
+hd.style.cssText = ‘text-align:center;margin-bottom:20px;’;
+hd.innerHTML = ‘<div style="font-size:32px;margin-bottom:8px">🎓</div><h2 style="font-size:22px;font-weight:800;color:var(--navy);margin:0 0 6px">Choose your mentor</h2><p style="font-size:14px;color:var(--muted);margin:0">They guide you through every lesson.</p>’;
 wrap.appendChild(hd);
 var grid = div({style:{display:‘grid’,gridTemplateColumns:‘1fr 1fr’,gap:12,marginBottom:20}});
-var MLIST=[
-{id:‘ken’,name:‘Ken’,color:’#1A56DB’,desc:‘Patient and detail-oriented.’},
-{id:‘maddy’,name:‘Maddy’,color:’#7C3AED’,desc:‘Energetic and encouraging.’},
-{id:‘abby’,name:‘Abby’,color:’#059669’,desc:‘Warm and supportive.’},
-{id:‘gatlin’,name:‘Gatlin’,color:’#DC2626’,desc:‘Direct and bold.’}
-];
 function buildCards() {
 while(grid.firstChild) grid.removeChild(grid.firstChild);
-MLIST.forEach(function(m) {
+MENTORS.forEach(function(m) {
 var isSel = selected===m.id;
 var card = div({
-style:{background:isSel?‘linear-gradient(180deg,’+m.color+‘22,’+m.color+‘08)’:’#fff’,border:’2.5px solid ’+(isSel?m.color:‘var(–border)’),borderRadius:16,padding:‘0 0 12px’,textAlign:‘center’,cursor:‘pointer’,overflow:‘hidden’,boxShadow:isSel?‘0 4px 16px ‘+m.color+‘33’:‘0 2px 0 var(–border)’},
-click:function(){selected=m.id;_survey.mentor_id=m.id;buildCards();}
+style:{
+background: isSel ? ‘linear-gradient(180deg,’+m.color+‘22,’+m.color+‘08)’ : ‘#fff’,
+border: ’2.5px solid ’+(isSel ? m.color : ‘var(–border)’),
+borderRadius:16, padding:‘0 0 12px’, textAlign:‘center’,
+cursor:‘pointer’, overflow:‘hidden’,
+boxShadow: isSel ? ‘0 4px 16px ‘+m.color+‘44’ : ‘0 2px 0 var(–border)’
+},
+click:function(){ selected=m.id; _survey.mentor_id=m.id; buildCards(); }
 });
-var ih = div({style:{height:‘110px’,display:‘flex’,alignItems:‘flex-end’,justifyContent:‘center’,background:isSel?‘linear-gradient(180deg,’+m.color+‘18,’+m.color+‘06)’:‘linear-gradient(180deg,#f0f4ff,#f8faff)’,borderBottom:‘1.5px solid ‘+(isSel?m.color+‘33’:‘var(–border)’),marginBottom:8,overflow:‘hidden’}});
+var iw = div({style:{height:‘110px’,display:‘flex’,alignItems:‘flex-end’,justifyContent:‘center’,
+background: isSel ? ‘linear-gradient(180deg,’+m.color+‘18,’+m.color+‘06)’ : ‘#f0f4ff’,
+borderBottom:‘1.5px solid ‘+(isSel ? m.color+‘33’ : ‘var(–border)’),
+marginBottom:8, overflow:‘hidden’, position:‘relative’}});
 var mi = document.createElement(‘img’);
 mi.src = getMentorStanding(m.id);
 mi.style.cssText = ‘height:108px;width:auto;object-fit:contain;display:block;’;
-ih.appendChild(mi);
-if(isSel){var ck=div({style:{position:‘absolute’,top:6,right:6,width:20,height:20,borderRadius:‘50%’,background:m.color,color:’#fff’,fontSize:12,fontWeight:800,display:‘flex’,alignItems:‘center’,justifyContent:‘center’}},‘✓’);ih.style.position=‘relative’;ih.appendChild(ck);}
-card.appendChild(ih);
-var ne=document.createElement(‘div’);ne.textContent=m.name;ne.style.cssText=‘font-weight:800;font-size:14px;color:’+(isSel?m.color:‘var(–text)’)+’;margin-bottom:3px;’;
+iw.appendChild(mi);
+if(isSel) {
+var ck = div({style:{position:‘absolute’,top:6,right:6,width:20,height:20,borderRadius:‘50%’,background:m.color,color:’#fff’,fontSize:12,fontWeight:800,display:‘flex’,alignItems:‘center’,justifyContent:‘center’}},‘✓’);
+iw.appendChild(ck);
+}
+card.appendChild(iw);
+var ne = document.createElement(‘div’);
+ne.textContent = m.name;
+ne.style.cssText = ‘font-weight:800;font-size:14px;color:’+(isSel?m.color:‘var(–text)’)+’;margin-bottom:3px;’;
 card.appendChild(ne);
-var de=document.createElement(‘div’);de.textContent=m.desc;de.style.cssText=‘font-size:11px;color:var(–muted);padding:0 8px;line-height:1.4;’;
+var de = document.createElement(‘div’);
+de.textContent = m.desc;
+de.style.cssText = ‘font-size:11px;color:var(–muted);padding:0 8px;line-height:1.4;’;
 card.appendChild(de);
 grid.appendChild(card);
 });
 }
 buildCards();
 wrap.appendChild(grid);
-var err=div({style:{color:‘var(–danger)’,fontSize:13,textAlign:‘center’,marginBottom:8,minHeight:16}});
-wrap.appendChild(err);
-var sb=btn({class:‘btn btn-p’,click:async function(){
-if(!selected){err.textContent=‘Please choose a mentor!’;return;}
-_survey.mentor_id=selected;
+var errEl = div({style:{color:‘var(–danger)’,fontSize:13,textAlign:‘center’,marginBottom:8,minHeight:16}});
+wrap.appendChild(errEl);
+var sb = btn({class:‘btn btn-p’, click:async function(){
+if(!selected){ errEl.textContent=‘Please choose a mentor!’; return; }
+_survey.mentor_id = selected;
 await finishSignup();
-}},‘Start Learning 🚀’);
+}},‘🚀 Start Learning’);
 wrap.appendChild(sb);
 return wrap;
 }
 
 function showMentorPicker() {
-var selected=null;
-function render(){
-var wrap=div({style:{padding:‘24px 20px 40px’,background:‘var(–off)’,minHeight:‘100%’,overflowY:‘auto’}});
-var hd=document.createElement(‘div’);
-hd.style.cssText=‘text-align:center;margin-bottom:24px;’;
-hd.innerHTML=’<div style="font-size:40px;margin-bottom:10px">👋</div><h2 style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:6px">Choose your mentor</h2><p style="font-size:14px;color:var(--muted)">They guide you through every lesson.</p>’;
+var selected = null;
+function render() {
+var wrap = div({style:{padding:‘24px 20px 40px’,background:‘var(–off)’,minHeight:‘100%’,overflowY:‘auto’}});
+var hd = document.createElement(‘div’);
+hd.style.cssText = ‘text-align:center;margin-bottom:20px;’;
+hd.innerHTML = ‘<div style="font-size:40px;margin-bottom:10px">👋</div><h2 style="font-size:22px;font-weight:800;color:var(--navy);margin:0 0 6px">Pick your mentor</h2><p style="font-size:14px;color:var(--muted);margin:0">They guide you through every lesson.</p>’;
 wrap.appendChild(hd);
-var grid=div({style:{display:‘grid’,gridTemplateColumns:‘1fr 1fr’,gap:12,marginBottom:20}});
-var MLIST2=[
-{id:‘ken’,name:‘Ken’,color:’#1A56DB’,desc:‘Patient and detail-oriented.’},
-{id:‘maddy’,name:‘Maddy’,color:’#7C3AED’,desc:‘Energetic and encouraging.’},
-{id:‘abby’,name:‘Abby’,color:’#059669’,desc:‘Warm and supportive.’},
-{id:‘gatlin’,name:‘Gatlin’,color:’#DC2626’,desc:‘Direct and bold.’}
-];
-MLIST2.forEach(function(m){
-var isSel=selected===m.id;
-var card=div({
-style:{background:isSel?‘linear-gradient(180deg,’+m.color+‘22,’+m.color+‘08)’:’#fff’,border:’2.5px solid ‘+(isSel?m.color:‘var(–border)’),borderRadius:16,padding:‘0 0 12px’,textAlign:‘center’,cursor:‘pointer’,overflow:‘hidden’,boxShadow:isSel?‘0 4px 16px ‘+m.color+‘33’:‘0 2px 0 var(–border)’},
-click:function(){selected=m.id;render();}
+var grid = div({style:{display:‘grid’,gridTemplateColumns:‘1fr 1fr’,gap:12,marginBottom:20}});
+MENTORS.forEach(function(m) {
+var isSel = selected===m.id;
+var card = div({
+style:{
+background: isSel ? ‘linear-gradient(180deg,’+m.color+‘22,’+m.color+‘08)’ : ‘#fff’,
+border: ’2.5px solid ’+(isSel ? m.color : ‘var(–border)’),
+borderRadius:16, padding:‘0 0 12px’, textAlign:‘center’,
+cursor:‘pointer’, overflow:‘hidden’,
+boxShadow: isSel ? ‘0 4px 16px ‘+m.color+‘44’ : ‘0 2px 0 var(–border)’
+},
+click:function(){ selected=m.id; render(); }
 });
-var ih=div({style:{height:‘110px’,display:‘flex’,alignItems:‘flex-end’,justifyContent:‘center’,background:isSel?‘linear-gradient(180deg,’+m.color+‘18,’+m.color+‘06)’:‘linear-gradient(180deg,#f0f4ff,#f8faff)’,borderBottom:‘1.5px solid ‘+(isSel?m.color+‘33’:‘var(–border)’),marginBottom:8,overflow:‘hidden’}});
-var mi=document.createElement(‘img’);mi.src=getMentorStanding(m.id);mi.style.cssText=‘height:108px;width:auto;object-fit:contain;display:block;’;
-ih.appendChild(mi);
-card.appendChild(ih);
-var ne=document.createElement(‘div’);ne.textContent=m.name;ne.style.cssText=‘font-weight:800;font-size:14px;color:’+(isSel?m.color:‘var(–text)’)+’;margin-bottom:3px;’;
+var iw = div({style:{height:‘110px’,display:‘flex’,alignItems:‘flex-end’,justifyContent:‘center’,
+background: isSel ? ‘linear-gradient(180deg,’+m.color+‘18,’+m.color+‘06)’ : ‘#f0f4ff’,
+borderBottom:‘1.5px solid ‘+(isSel ? m.color+‘33’ : ‘var(–border)’),
+marginBottom:8, overflow:‘hidden’}});
+var mi = document.createElement(‘img’);
+mi.src = getMentorStanding(m.id);
+mi.style.cssText = ‘height:108px;width:auto;object-fit:contain;display:block;’;
+iw.appendChild(mi);
+card.appendChild(iw);
+var ne = document.createElement(‘div’);
+ne.textContent = m.name;
+ne.style.cssText = ‘font-weight:800;font-size:14px;color:’+(isSel?m.color:‘var(–text)’)+’;margin-bottom:3px;’;
 card.appendChild(ne);
-var de=document.createElement(‘div’);de.textContent=m.desc;de.style.cssText=‘font-size:11px;color:var(–muted);padding:0 8px;line-height:1.4;’;
+var de = document.createElement(‘div’);
+de.textContent = m.desc;
+de.style.cssText = ‘font-size:11px;color:var(–muted);padding:0 8px;line-height:1.4;’;
 card.appendChild(de);
 grid.appendChild(card);
 });
 wrap.appendChild(grid);
-var err2=div({style:{color:‘var(–danger)’,fontSize:13,textAlign:‘center’,marginBottom:8,minHeight:16}});
+var err2 = div({style:{color:‘var(–danger)’,fontSize:13,textAlign:‘center’,marginBottom:8,minHeight:16}});
 wrap.appendChild(err2);
-var sb2=btn({class:‘btn btn-p’,click:function(){
-if(!selected){err2.textContent=‘Please pick a mentor!’;return;}
+var sb2 = btn({class:‘btn btn-p’, click:function(){
+if(!selected){ err2.textContent=“Please pick a mentor!”; return; }
 S.user.mentor_id=selected;
 localStorage.setItem(‘pw_u’,JSON.stringify(S.user));
-if(S.user.email&&S.token){var _h=authH(S.token);_h[‘Content-Type’]=‘application/json’;_h[‘Prefer’]=‘return=minimal’;fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),{method:‘PATCH’,headers:_h,body:JSON.stringify({mentor_id:selected})});}
+if(S.user.email&&S.token){
+var h=authH(S.token);
+h[‘Content-Type’]=‘application/json’;
+h[‘Prefer’]=‘return=minimal’;
+fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),{method:‘PATCH’,headers:h,body:JSON.stringify({mentor_id:selected})});
+}
 renderApp();
-}},“Let’s Go 🚀”);
+}},‘🚀 Lets Go’);
 wrap.appendChild(sb2);
 mount(div({style:{display:‘flex’,flexDirection:‘column’,height:‘100%’}},wrap));
 }
@@ -827,78 +849,49 @@ mount(wrapper);
 }
 
 // – MAIN APP ——————————————————————
-var MENTOR_IMAGES = {
-ken: {
-standing: null,
-happy: null,
-excited: null,
-thinking: null,
-confused: null,
-proud: null,
-cheerful: null,
-},
-abby: {
-standing: null,
-happy: null,
-excited: null,
-thinking: null,
-confused: null,
-proud: null,
-cheerful: null,
-},
-maddy: {
-standing: null,
-happy: null,
-excited: null,
-thinking: null,
-confused: null,
-proud: null,
-cheerful: null,
-},
-gatlin: {
-standing: null,
-happy: null,
-excited: null,
-thinking: null,
-confused: null,
-proud: null,
-cheerful: null,
-},
-};
 
-function getMentorImg(id, emotion) {
-var imgs = MENTOR_IMAGES[id] || MENTOR_IMAGES.ken;
-if(!imgs) return ‘’;
-return imgs[emotion] || imgs.happy || ‘’;
-}
-function getMentorStanding(id) {
-var imgs = MENTOR_IMAGES[id] || MENTOR_IMAGES.ken;
-if(!imgs) return ‘’;
-return imgs.standing || ‘’;
-}
-
-function *loadMentorImages() {
-var chars = [‘ken’,‘abby’,‘maddy’,‘gatlin’];
-var emos = [‘standing’,‘happy’,‘excited’,‘thinking’,‘confused’,‘proud’,‘cheerful’];
-for(var ci=0; ci<chars.length; ci++) {
-var c = chars[ci];
-for(var ei=0; ei<emos.length; ei++) {
-var e = emos[ei];
-var el = document.getElementById(’mi*’ + c + ‘_’ + e);
-if(el && MENTOR_IMAGES[c]) MENTOR_IMAGES[c][e] = el.src;
-}
-}
-}
-
+// ── Mentor System ───────────────────────────────────────────────
 var MENTORS = [
-{id:‘ken’,    name:‘Ken’,    color:’#1A56DB’, desc:‘Patient and detail-oriented. Breaks everything down step by step.’},
-{id:‘maddy’,  name:‘Maddy’,  color:’#7C3AED’, desc:‘Energetic and encouraging. Makes hard topics feel easy.’},
-{id:‘abby’,   name:‘Abby’,   color:’#059669’, desc:‘Warm and supportive. Always in your corner.’},
-{id:‘gatlin’, name:‘Gatlin’, color:’#DC2626’, desc:‘Direct and bold. Gives you the real talk you need.’}
+{id:‘ken’,    name:‘Ken’,    color:’#1A56DB’, desc:‘Patient and detail-oriented.’},
+{id:‘maddy’,  name:‘Maddy’,  color:’#7C3AED’, desc:‘Energetic and encouraging.’},
+{id:‘abby’,   name:‘Abby’,   color:’#059669’, desc:‘Warm and supportive.’},
+{id:‘gatlin’, name:‘Gatlin’, color:’#DC2626’, desc:‘Direct and bold.’}
 ];
 
+var MENTOR_IMAGES = {
+ken:    {standing:null,happy:null,excited:null,thinking:null,confused:null,proud:null,cheerful:null},
+abby:   {standing:null,happy:null,excited:null,thinking:null,confused:null,proud:null,cheerful:null},
+maddy:  {standing:null,happy:null,excited:null,thinking:null,confused:null,proud:null,cheerful:null},
+gatlin: {standing:null,happy:null,excited:null,thinking:null,confused:null,proud:null,cheerful:null}
+};
+
+function *loadMentorImages() {
+var chars=[‘ken’,‘abby’,‘maddy’,‘gatlin’];
+var emos=[‘standing’,‘happy’,‘excited’,‘thinking’,‘confused’,‘proud’,‘cheerful’];
+for(var ci=0;ci<chars.length;ci++) {
+var c=chars[ci];
+for(var ei=0;ei<emos.length;ei++) {
+var e=emos[ei];
+var el=document.getElementById(’mi*’+c+’_’+e);
+if(el&&MENTOR_IMAGES[c]) MENTOR_IMAGES[c][e]=el.src;
+}
+}
+}
+
+function getMentorImg(id,emotion) {
+var imgs=MENTOR_IMAGES[id]||MENTOR_IMAGES[‘ken’];
+if(!imgs) return ‘’;
+return imgs[emotion]||imgs[‘happy’]||’’;
+}
+
+function getMentorStanding(id) {
+var imgs=MENTOR_IMAGES[id]||MENTOR_IMAGES[‘ken’];
+if(!imgs) return ‘’;
+return imgs[‘standing’]||’’;
+}
+
 function getMentor() {
-var id = (S.user && S.user.mentor_id) || ‘ken’;
+var id=(S.user&&S.user.mentor_id)||‘ken’;
 for(var i=0;i<MENTORS.length;i++) if(MENTORS[i].id===id) return MENTORS[i];
 return MENTORS[0];
 }
@@ -907,8 +900,7 @@ let _showAdmin=false, _editProfile=false, _selCourse=null, _selLesson=null, _sel
 let _quiz={cur:0,sel:null,answered:false,score:0,done:false};
 
 async function showMainApp() {
-// Render immediately from cache, sync in background
-if(!S.courses) S.courses=[];
+if(!S.courses||!S.courses.length) S.courses=[];
 if(!S.resourceCats) S.resourceCats=[];
 if(!S.resources) S.resources=[];
 if(S.user && (!S.user.mentor_id || S.user.mentor_id===’’)) {
@@ -916,37 +908,41 @@ showMentorPicker();
 return;
 }
 renderApp();
-// Background sync
-_bgSync();
+setTimeout(_bgSync, 0);
 }
 
 function *bgSync() {
-function wt(p,ms){return Promise.race([p,new Promise(function(r){setTimeout(function(){r(null);},ms);})]);}
+function wt(p) {
+return Promise.race([p, new Promise(function(r){ setTimeout(function(){ r(null); }, 8000); })]);
+}
 var tok=S.token, usr=S.user;
 Promise.all([
-wt(loadCourses(tok,!(usr&&usr.isAdmin)),8000),
-wt(sbGet(‘resource_categories’,’?order=order_index.asc’,tok),8000),
-wt(sbGet(‘resources’,’?order=order_index.asc’,tok),8000),
-wt((usr&&usr.id&&tok)?sbGet(‘user_lesson_progress’,’?user_id=eq.’+usr.id+’&select=lesson_id’,tok):Promise.resolve(null),8000),
-wt((usr&&usr.id&&!String(usr.id).startsWith(’local*’))?sbGet(‘user_badges’,’?user_id=eq.’+usr.id,tok):Promise.resolve(null),8000)
-]).then(function(res){
+wt(loadCourses(tok, !(usr&&usr.isAdmin))),
+wt(sbGet(‘resource_categories’,’?order=order_index.asc’,tok)),
+wt(sbGet(‘resources’,’?order=order_index.asc’,tok)),
+wt((usr&&usr.id&&tok) ? sbGet(‘user_lesson_progress’,’?user_id=eq.’+usr.id+’&select=lesson_id’,tok) : Promise.resolve(null)),
+wt((usr&&usr.id&&!String(usr.id).startsWith(’local*’)) ? sbGet(‘user_badges’,’?user_id=eq.’+usr.id,tok) : Promise.resolve(null))
+]).then(function(res) {
 if(res[0]&&res[0].length) S.courses=res[0];
 if(res[1]&&res[1].ok&&Array.isArray(res[1].data)) S.resourceCats=res[1].data;
 if(res[2]&&res[2].ok&&Array.isArray(res[2].data)) S.resources=res[2].data;
-if(res[3]&&res[3].ok&&Array.isArray(res[3].data)){
-res[3].data.forEach(function(row){if(row.lesson_id)S.progress[row.lesson_id]=true;});
+if(res[3]&&res[3].ok&&Array.isArray(res[3].data)) {
+res[3].data.forEach(function(row){ if(row.lesson_id) S.progress[row.lesson_id]=true; });
 localStorage.setItem(‘pw_p’,JSON.stringify(S.progress));
 }
 if(res[4]&&res[4].ok&&Array.isArray(res[4].data)) localStorage.setItem(‘pw_badges’,JSON.stringify(res[4].data));
-if(S.user){
-var pxp=S.totalXP(),sxp=S.user.xp_total||0,fxp=Math.max(pxp,sxp);
-S.user.xp_total=fxp; localStorage.setItem(‘pw_u’,JSON.stringify(S.user));
-if(pxp>sxp&&S.user.email&&S.token){var h2=authH(S.token);h2[‘Prefer’]=‘return=minimal’;fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),{method:‘PATCH’,headers:h2,body:JSON.stringify({xp_total:pxp})});}
+if(S.user) {
+var pxp=S.totalXP(), sxp=S.user.xp_total||0;
+S.user.xp_total=Math.max(pxp,sxp);
+localStorage.setItem(‘pw_u’,JSON.stringify(S.user));
+if(pxp>sxp && S.user.email && S.token) {
+var xh=authH(S.token); xh[‘Prefer’]=‘return=minimal’;
+fetch(SB_URL+’/rest/v1/profiles?email=eq.’+encodeURIComponent(S.user.email),{method:‘PATCH’,headers:xh,body:JSON.stringify({xp_total:pxp})});
 }
-if(S.user&&!_selLesson&&!_showAdmin) renderApp();
+}
+if(S.user && !_selLesson && !_showAdmin) renderApp();
 }).catch(function(){});
 }
-
 function showBadgeToast(emoji, courseTitle) {
 const toast = div({style:{
 position:‘fixed’,bottom:‘100px’,left:‘50%’,transform:‘translateX(-50%)’,
@@ -1707,22 +1703,18 @@ if(_quiz.answered)return;
 if(q.ans===lt)_quiz.score++;
 _quiz.sel=lt;_quiz.answered=true;renderLesson();
 }},div({class:‘ql’},lt),span({},q.opts[i])));
-var _qm=getMentor();
-var _qcorr=_quiz.answered&&q.ans===_quiz.sel;
-var mentorFbEl=null;
+var _qm=getMentor(), _qcr=_quiz.answered&&q.ans===_quiz.sel, expEl=null;
 if(_quiz.answered){
-var _qmi=document.createElement(‘img’);
-_qmi.src=getMentorImg(_qm.id,_qcorr?‘excited’:‘confused’);
-_qmi.style.cssText=‘width:60px;height:auto;object-fit:contain;flex-shrink:0;’;
-var _qbub=div({style:{background:_qcorr?‘var(–success-light)’:‘var(–danger-light)’,border:‘2px solid ‘+(_qcorr?’#BBF7D0’:’#FECACA’),borderRadius:‘14px 14px 14px 4px’,padding:‘10px 12px’,flex:1,fontSize:13,lineHeight:1.5,fontWeight:600,color:_qcorr?‘var(–success)’:‘var(–danger)’}},
-div({style:{fontWeight:800,marginBottom:3}},_qcorr?‘Correct!’:‘Not quite.’),
+var _qi=document.createElement(‘img’);
+_qi.src=getMentorImg(_qm.id,_qcr?‘excited’:‘confused’);
+_qi.style.cssText=‘width:56px;height:auto;object-fit:contain;flex-shrink:0;’;
+var _qb=div({style:{background:_qcr?‘var(–success-light)’:‘var(–danger-light)’,border:‘2px solid ‘+(_qcr?’#BBF7D0’:’#FECACA’),borderRadius:‘14px 14px 14px 4px’,padding:‘10px 12px’,flex:1,fontSize:13,lineHeight:‘1.5’,fontWeight:600,color:_qcr?‘var(–success)’:‘var(–danger)’}},
+div({style:{fontWeight:800,marginBottom:3}},_qcr?‘✅ Correct!’:‘❌ Not quite.’),
 div({style:{fontWeight:400,color:‘var(–text)’,marginTop:3}},q.exp||’’)
 );
-mentorFbEl=div({style:{display:‘flex’,alignItems:‘flex-end’,gap:8,marginTop:12}});
-mentorFbEl.appendChild(_qmi);
-mentorFbEl.appendChild(_qbub);
+expEl=div({style:{display:‘flex’,alignItems:‘flex-end’,gap:8,marginTop:12}});
+expEl.appendChild(_qi); expEl.appendChild(_qb);
 }
-const expEl=mentorFbEl;
 const nextB=_quiz.answered?btn({class:‘btn btn-p’,style:{marginTop:9},‘click’:()=>{
 if(_quiz.cur+1>=qs.length)_quiz.done=true;else{_quiz.cur++;_quiz.sel=null;_quiz.answered=false;}renderLesson();
 }},_quiz.cur+1<qs.length?‘Next Question →’:‘See Results’):null;
@@ -1742,21 +1734,22 @@ return;
 if(l.type===‘text’){
 var bodyDiv = div({style:{padding:‘16px 16px 30px’}});
 var _m = getMentor();
-var mentorIntro = div({style:{display:‘flex’,alignItems:‘flex-end’,gap:10,marginBottom:18}});
-var avImg = document.createElement(‘img’);
-avImg.src = getMentorImg(_m.id,‘happy’);
-avImg.style.cssText = ‘width:72px;height:auto;object-fit:contain;flex-shrink:0;’;
-var bubble = div({style:{background:’#fff’,border:‘2px solid var(–border)’,borderRadius:‘18px 18px 18px 4px’,padding:‘12px 14px’,fontSize:14,lineHeight:1.6,color:‘var(–text)’,fontWeight:500,flex:1,boxShadow:‘0 2px 8px rgba(0,0,0,.06)’}});
-var bname = document.createElement(‘div’);
-bname.textContent = _m.name + ’ · Your Mentor’;
-bname.style.cssText = ‘font-size:11px;font-weight:800;color:var(–primary);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;’;
-bubble.appendChild(bname);
-var btxt = document.createElement(‘div’);
-btxt.textContent = “Let’s walk through this together. I’ll break it down so it makes sense.”;
-bubble.appendChild(btxt);
-mentorIntro.appendChild(avImg);
-mentorIntro.appendChild(bubble);
-bodyDiv.appendChild(mentorIntro);
+// Mentor intro bubble
+var _mintro = div({style:{display:‘flex’,alignItems:‘flex-end’,gap:10,marginBottom:18}});
+var _mav = document.createElement(‘img’);
+_mav.src = getMentorImg(_m.id,‘happy’);
+_mav.style.cssText = ‘width:68px;height:auto;object-fit:contain;flex-shrink:0;’;
+var _mbub = div({style:{background:’#fff’,border:‘2px solid var(–border)’,borderRadius:‘18px 18px 18px 4px’,padding:‘12px 14px’,fontSize:14,lineHeight:‘1.6’,color:‘var(–text)’,fontWeight:500,flex:1,boxShadow:‘0 2px 8px rgba(0,0,0,.06)’}});
+var _mbn = document.createElement(‘div’);
+_mbn.textContent = _m.name+’ · Your Mentor’;
+_mbn.style.cssText = ‘font-size:11px;font-weight:800;color:var(–primary);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;’;
+_mbub.appendChild(_mbn);
+var _mbt = document.createElement(‘div’);
+_mbt.textContent = “Let’s walk through this together. I’ll break it down so it makes sense.”;
+_mbub.appendChild(_mbt);
+_mintro.appendChild(_mav);
+_mintro.appendChild(_mbub);
+bodyDiv.appendChild(_mintro);
 var rawContent = l.content || ‘No content yet.’;
 // Parse content - split by newlines, handle [IMAGE:url] markers
 var parts = rawContent.split(’\n’);
@@ -1771,19 +1764,20 @@ h(‘img’,{src:imgUrl,style:{width:‘100%’,display:‘block’,borderRadius
 bodyDiv.appendChild(p({style:{marginBottom:8,fontSize:15,lineHeight:1.8,color:‘var(–text)’}},line||’\u00A0’));
 }
 });
-var mentorSignoff = div({style:{display:‘flex’,alignItems:‘flex-end’,gap:10,marginTop:20,marginBottom:10}});
-var av2 = document.createElement(‘img’);
-av2.src = getMentorImg(_m.id, S.isDone(l.id) ? ‘proud’ : ‘cheerful’);
-av2.style.cssText = ‘width:72px;height:auto;object-fit:contain;flex-shrink:0;’;
-var bub2 = div({style:{background:’#fff’,border:‘2px solid var(–border)’,borderRadius:‘18px 18px 18px 4px’,padding:‘12px 14px’,fontSize:14,lineHeight:1.6,color:‘var(–text)’,fontWeight:500,flex:1,boxShadow:‘0 2px 8px rgba(0,0,0,.06)’}});
-var bt2 = document.createElement(‘div’);
-bt2.textContent = S.isDone(l.id) ? “You already crushed this one! Review anytime.” : “You’ve got this! Tap below when you’re done.”;
-bub2.appendChild(bt2);
-mentorSignoff.appendChild(av2);
-mentorSignoff.appendChild(bub2);
-bodyDiv.appendChild(mentorSignoff);
+// Mentor signoff
+var _msoff = div({style:{display:‘flex’,alignItems:‘flex-end’,gap:10,marginTop:20,marginBottom:10}});
+var _mav2 = document.createElement(‘img’);
+_mav2.src = getMentorImg(_m.id, S.isDone(l.id)?‘proud’:‘cheerful’);
+_mav2.style.cssText = ‘width:68px;height:auto;object-fit:contain;flex-shrink:0;’;
+var _mbub2 = div({style:{background:’#fff’,border:‘2px solid var(–border)’,borderRadius:‘18px 18px 18px 4px’,padding:‘12px 14px’,fontSize:14,lineHeight:‘1.6’,color:‘var(–text)’,fontWeight:500,flex:1,boxShadow:‘0 2px 8px rgba(0,0,0,.06)’}});
+var _mbt2 = document.createElement(‘div’);
+_mbt2.textContent = S.isDone(l.id) ? “You already nailed this one! Review anytime.” : “You got this! Tap below when you are done reading.”;
+_mbub2.appendChild(_mbt2);
+_msoff.appendChild(_mav2);
+_msoff.appendChild(_mbub2);
+bodyDiv.appendChild(_msoff);
 if(!S.isDone(l.id)) {
-bodyDiv.appendChild(btn({class:‘btn btn-p’,style:{marginTop:10},‘click’:function(){S.complete(l.id,l.xp);back();}},‘Got it! +’+l.xp+’ XP’));
+bodyDiv.appendChild(btn({class:‘btn btn-p’,style:{marginTop:10},‘click’:function(){S.complete(l.id,l.xp);back();}},‘Got it! +’+l.xp+’ XP ⚡’));
 } else {
 bodyDiv.appendChild(div({class:‘sb’,style:{textAlign:‘center’,marginTop:14}},‘✅ Lesson completed!’));
 }
@@ -3275,15 +3269,16 @@ _form.email = S.user.email;
 showSplash();
 }
 
-window.onerror = function(msg,src,line,col,err) {
-var app=document.getElementById(‘app’);
-if(app) app.innerHTML=’<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:#0D2461;color:#fff;padding:32px;text-align:center;"><div style="font-size:48px;margin-bottom:16px">⚠️</div><p style="font-size:16px;font-weight:700;margin-bottom:8px">Something went wrong</p><p style="font-size:13px;opacity:.7;margin-bottom:24px">’+msg+’</p><button onclick="location.reload()" style="background:#1A56DB;color:#fff;border:none;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Try Again</button></div>’;
+window.onerror=function(msg){
+var a=document.getElementById(‘app’);
+if(a) a.innerHTML=’<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:#0D2461;color:#fff;padding:32px;text-align:center"><div style="font-size:48px;margin-bottom:16px">⚠️</div><p style="font-size:16px;font-weight:700;margin-bottom:8px">Something went wrong</p><p style="font-size:13px;opacity:.7;margin-bottom:24px">’+msg+’</p><button onclick="location.reload()" style="background:#1A56DB;color:#fff;border:none;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Try Again</button></div>’;
 };
 if (document.readyState === ‘loading’) {
 document.addEventListener(‘DOMContentLoaded’, _start);
 } else {
 _start();
 }
+
 </script>
 
 <div id="mentor-imgs" style="display:none" aria-hidden="true">
